@@ -1,0 +1,28 @@
+# Environnements
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+
+# Docker volumes locaux
+data/
+
+# Modèles ML
+*.pt
+*.pkl
+
+# Credentials connecteurs (JAMAIS en clair)
+packages/connectors/*/config.yaml
+infra/terraform/*.tfvars
