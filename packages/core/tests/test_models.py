@@ -7,19 +7,19 @@ Lancer avec : pytest packages/core/tests/test_models.py -v
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
+from packages.core.models.edge import CuzEdge
 from packages.core.models.enums import EdgeType, NodeType
 from packages.core.models.node import CuzNode
-from packages.core.models.edge import CuzEdge
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 1 — NodeType enum (5 tests)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def test_nodetype_count():
     """21 types de nœuds définis."""
@@ -63,6 +63,7 @@ def test_nodetype_from_string():
 # SECTION 2 — EdgeType enum (5 tests)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_edgetype_count():
     """20 types d'arêtes définis."""
     assert len(EdgeType) == 20
@@ -103,6 +104,7 @@ def test_edgetype_all_values_are_uppercase_strings():
 # SECTION 3 — CuzNode création et attributs (10 tests)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_cuznode_minimal_creation():
     """CuzNode créable avec les champs minimaux obligatoires."""
     node = CuzNode(
@@ -133,12 +135,18 @@ def test_cuznode_id_auto_generated():
 def test_cuznode_two_nodes_have_different_ids():
     """Deux nœuds créés sans id ont des ids différents."""
     node1 = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="s1", confidence_score=0.9, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="s1",
+        confidence_score=0.9,
+        freshness_score=0.9,
     )
     node2 = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="s2", confidence_score=0.9, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="s2",
+        confidence_score=0.9,
+        freshness_score=0.9,
     )
     assert node1.id != node2.id
 
@@ -159,8 +167,11 @@ def test_cuznode_custom_id():
 def test_cuznode_external_ids_default_empty():
     """external_ids est un dict vide par défaut."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.USER,
-        name="alice", confidence_score=0.9, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.USER,
+        name="alice",
+        confidence_score=0.9,
+        freshness_score=0.9,
     )
     assert node.external_ids == {}
     assert node.sources == []
@@ -189,8 +200,11 @@ def test_cuznode_with_external_ids():
 def test_cuznode_attributes_dict():
     """Le champ attributes accepte des données arbitraires."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.VIRTUAL_MACHINE,
-        name="vm-prod-01", confidence_score=0.9, freshness_score=0.7,
+        tenant_id="t1",
+        node_type=NodeType.VIRTUAL_MACHINE,
+        name="vm-prod-01",
+        confidence_score=0.9,
+        freshness_score=0.7,
         attributes={"os": "Ubuntu 22.04", "vcpus": 4, "ram_gb": 16},
     )
     assert node.attributes["os"] == "Ubuntu 22.04"
@@ -200,8 +214,11 @@ def test_cuznode_attributes_dict():
 def test_cuznode_tags_dict():
     """Le champ tags accepte des paires clé-valeur string."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.APPLICATION,
-        name="api-gateway", confidence_score=0.85, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.APPLICATION,
+        name="api-gateway",
+        confidence_score=0.85,
+        freshness_score=0.9,
         tags={"env": "production", "owner": "team-platform"},
     )
     assert node.tags["env"] == "production"
@@ -211,8 +228,11 @@ def test_cuznode_tags_dict():
 def test_cuznode_timestamps_auto_set():
     """Les timestamps created_at, updated_at, last_seen sont auto-définis."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.CLUSTER,
-        name="k8s-prod", confidence_score=0.92, freshness_score=0.88,
+        tenant_id="t1",
+        node_type=NodeType.CLUSTER,
+        name="k8s-prod",
+        confidence_score=0.92,
+        freshness_score=0.88,
     )
     assert isinstance(node.created_at, datetime)
     assert isinstance(node.updated_at, datetime)
@@ -223,9 +243,11 @@ def test_cuznode_all_node_types_accepted():
     """CuzNode accepte tous les 21 NodeType."""
     for nt in NodeType:
         node = CuzNode(
-            tenant_id="t1", node_type=nt,
+            tenant_id="t1",
+            node_type=nt,
             name=f"test-{nt.value.lower()}",
-            confidence_score=0.8, freshness_score=0.8,
+            confidence_score=0.8,
+            freshness_score=0.8,
         )
         assert node.node_type == nt
 
@@ -234,11 +256,15 @@ def test_cuznode_all_node_types_accepted():
 # SECTION 4 — CuzNode validation des scores (8 tests)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_cuznode_confidence_score_zero():
     """confidence_score = 0.0 est valide."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="unknown-srv", confidence_score=0.0, freshness_score=0.5,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="unknown-srv",
+        confidence_score=0.0,
+        freshness_score=0.5,
     )
     assert node.confidence_score == 0.0
 
@@ -246,8 +272,11 @@ def test_cuznode_confidence_score_zero():
 def test_cuznode_confidence_score_one():
     """confidence_score = 1.0 est valide."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="trusted-srv", confidence_score=1.0, freshness_score=0.5,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="trusted-srv",
+        confidence_score=1.0,
+        freshness_score=0.5,
     )
     assert node.confidence_score == 1.0
 
@@ -256,8 +285,11 @@ def test_cuznode_confidence_score_above_one_raises():
     """confidence_score > 1.0 lève une ValidationError."""
     with pytest.raises(ValidationError):
         CuzNode(
-            tenant_id="t1", node_type=NodeType.SERVER,
-            name="bad", confidence_score=1.1, freshness_score=0.5,
+            tenant_id="t1",
+            node_type=NodeType.SERVER,
+            name="bad",
+            confidence_score=1.1,
+            freshness_score=0.5,
         )
 
 
@@ -265,16 +297,22 @@ def test_cuznode_confidence_score_negative_raises():
     """confidence_score < 0.0 lève une ValidationError."""
     with pytest.raises(ValidationError):
         CuzNode(
-            tenant_id="t1", node_type=NodeType.SERVER,
-            name="bad", confidence_score=-0.1, freshness_score=0.5,
+            tenant_id="t1",
+            node_type=NodeType.SERVER,
+            name="bad",
+            confidence_score=-0.1,
+            freshness_score=0.5,
         )
 
 
 def test_cuznode_freshness_score_zero():
     """freshness_score = 0.0 est valide (nœud stale)."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.VULNERABILITY,
-        name="old-cve", confidence_score=0.9, freshness_score=0.0,
+        tenant_id="t1",
+        node_type=NodeType.VULNERABILITY,
+        name="old-cve",
+        confidence_score=0.9,
+        freshness_score=0.0,
     )
     assert node.freshness_score == 0.0
 
@@ -283,16 +321,22 @@ def test_cuznode_freshness_score_above_one_raises():
     """freshness_score > 1.0 lève une ValidationError."""
     with pytest.raises(ValidationError):
         CuzNode(
-            tenant_id="t1", node_type=NodeType.SERVER,
-            name="bad", confidence_score=0.9, freshness_score=1.5,
+            tenant_id="t1",
+            node_type=NodeType.SERVER,
+            name="bad",
+            confidence_score=0.9,
+            freshness_score=1.5,
         )
 
 
 def test_cuznode_score_rounded_to_4_decimals():
     """Les scores sont arrondis à 4 décimales."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="srv", confidence_score=0.123456789, freshness_score=0.987654321,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="srv",
+        confidence_score=0.123456789,
+        freshness_score=0.987654321,
     )
     assert node.confidence_score == round(0.123456789, 4)
     assert node.freshness_score == round(0.987654321, 4)
@@ -302,8 +346,10 @@ def test_cuznode_missing_confidence_score_raises():
     """confidence_score est obligatoire."""
     with pytest.raises(ValidationError):
         CuzNode(
-            tenant_id="t1", node_type=NodeType.SERVER,
-            name="srv", freshness_score=0.8,
+            tenant_id="t1",
+            node_type=NodeType.SERVER,
+            name="srv",
+            freshness_score=0.8,
         )
 
 
@@ -311,11 +357,15 @@ def test_cuznode_missing_confidence_score_raises():
 # SECTION 5 — CuzNode sérialisation / désérialisation JSON (7 tests)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_cuznode_serializable_to_json():
     """CuzNode est sérialisable en JSON sans erreur."""
     node = CuzNode(
-        tenant_id="acmecorp", node_type=NodeType.APPLICATION,
-        name="my-app", confidence_score=0.9, freshness_score=0.8,
+        tenant_id="acmecorp",
+        node_type=NodeType.APPLICATION,
+        name="my-app",
+        confidence_score=0.9,
+        freshness_score=0.8,
     )
     json_str = node.model_dump_json()
     assert isinstance(json_str, str)
@@ -362,15 +412,27 @@ def test_cuznode_roundtrip_json():
 def test_cuznode_model_dump_contains_required_fields():
     """model_dump() contient tous les champs attendus."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.USER,
-        name="alice", confidence_score=0.9, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.USER,
+        name="alice",
+        confidence_score=0.9,
+        freshness_score=0.9,
     )
     d = node.model_dump()
     required_fields = [
-        "id", "tenant_id", "node_type", "name",
-        "confidence_score", "freshness_score",
-        "sources", "external_ids", "attributes", "tags",
-        "created_at", "updated_at", "last_seen",
+        "id",
+        "tenant_id",
+        "node_type",
+        "name",
+        "confidence_score",
+        "freshness_score",
+        "sources",
+        "external_ids",
+        "attributes",
+        "tags",
+        "created_at",
+        "updated_at",
+        "last_seen",
     ]
     for field in required_fields:
         assert field in d, f"Champ manquant dans model_dump() : {field}"
@@ -378,13 +440,15 @@ def test_cuznode_model_dump_contains_required_fields():
 
 def test_cuznode_from_json_with_node_type_string():
     """NodeType peut être désérialisé depuis sa valeur string."""
-    json_str = json.dumps({
-        "tenant_id": "t1",
-        "node_type": "CLUSTER",
-        "name": "k8s-dev",
-        "confidence_score": 0.88,
-        "freshness_score": 0.72,
-    })
+    json_str = json.dumps(
+        {
+            "tenant_id": "t1",
+            "node_type": "CLUSTER",
+            "name": "k8s-dev",
+            "confidence_score": 0.88,
+            "freshness_score": 0.72,
+        }
+    )
     node = CuzNode.model_validate_json(json_str)
     assert node.node_type == NodeType.CLUSTER
 
@@ -393,8 +457,11 @@ def test_cuznode_invalid_node_type_raises():
     """Un node_type invalide lève une ValidationError."""
     with pytest.raises(ValidationError):
         CuzNode(
-            tenant_id="t1", node_type="NOT_A_TYPE",
-            name="bad", confidence_score=0.8, freshness_score=0.8,
+            tenant_id="t1",
+            node_type="NOT_A_TYPE",
+            name="bad",
+            confidence_score=0.8,
+            freshness_score=0.8,
         )
 
 
@@ -403,13 +470,16 @@ def test_cuznode_missing_tenant_id_raises():
     with pytest.raises(ValidationError):
         CuzNode(
             node_type=NodeType.SERVER,
-            name="srv", confidence_score=0.8, freshness_score=0.8,
+            name="srv",
+            confidence_score=0.8,
+            freshness_score=0.8,
         )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 6 — CuzEdge création, validation, sérialisation (10 tests)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def test_cuzedge_minimal_creation():
     """CuzEdge créable avec les champs minimaux."""
@@ -428,9 +498,12 @@ def test_cuzedge_minimal_creation():
 def test_cuzedge_id_auto_generated():
     """L'id de l'arête est généré automatiquement."""
     edge = CuzEdge(
-        tenant_id="t1", edge_type=EdgeType.CALLS,
-        source_id="a", target_id="b",
-        confidence_score=0.8, freshness_score=0.8,
+        tenant_id="t1",
+        edge_type=EdgeType.CALLS,
+        source_id="a",
+        target_id="b",
+        confidence_score=0.8,
+        freshness_score=0.8,
     )
     assert edge.id is not None
     assert len(edge.id) == 36
@@ -440,9 +513,12 @@ def test_cuzedge_all_edge_types_accepted():
     """CuzEdge accepte tous les 20 EdgeType."""
     for et in EdgeType:
         edge = CuzEdge(
-            tenant_id="t1", edge_type=et,
-            source_id="src", target_id="tgt",
-            confidence_score=0.8, freshness_score=0.8,
+            tenant_id="t1",
+            edge_type=et,
+            source_id="src",
+            target_id="tgt",
+            confidence_score=0.8,
+            freshness_score=0.8,
         )
         assert edge.edge_type == et
 
@@ -451,9 +527,12 @@ def test_cuzedge_confidence_above_one_raises():
     """confidence_score > 1.0 sur une arête lève une erreur."""
     with pytest.raises(ValidationError):
         CuzEdge(
-            tenant_id="t1", edge_type=EdgeType.HOSTS,
-            source_id="a", target_id="b",
-            confidence_score=1.5, freshness_score=0.8,
+            tenant_id="t1",
+            edge_type=EdgeType.HOSTS,
+            source_id="a",
+            target_id="b",
+            confidence_score=1.5,
+            freshness_score=0.8,
         )
 
 
@@ -461,18 +540,24 @@ def test_cuzedge_negative_freshness_raises():
     """freshness_score négatif lève une ValidationError."""
     with pytest.raises(ValidationError):
         CuzEdge(
-            tenant_id="t1", edge_type=EdgeType.DEPENDS_ON,
-            source_id="a", target_id="b",
-            confidence_score=0.8, freshness_score=-0.1,
+            tenant_id="t1",
+            edge_type=EdgeType.DEPENDS_ON,
+            source_id="a",
+            target_id="b",
+            confidence_score=0.8,
+            freshness_score=-0.1,
         )
 
 
 def test_cuzedge_attributes_dict():
     """CuzEdge accepte des attributs arbitraires."""
     edge = CuzEdge(
-        tenant_id="t1", edge_type=EdgeType.TRANSFERS_TO,
-        source_id="queue-01", target_id="app-02",
-        confidence_score=0.9, freshness_score=0.9,
+        tenant_id="t1",
+        edge_type=EdgeType.TRANSFERS_TO,
+        source_id="queue-01",
+        target_id="app-02",
+        confidence_score=0.9,
+        freshness_score=0.9,
         attributes={"protocol": "AMQP", "port": 5672},
     )
     assert edge.attributes["protocol"] == "AMQP"
@@ -481,9 +566,12 @@ def test_cuzedge_attributes_dict():
 def test_cuzedge_serializable_to_json():
     """CuzEdge est sérialisable en JSON."""
     edge = CuzEdge(
-        tenant_id="acmecorp", edge_type=EdgeType.MONITORS,
-        source_id="prometheus", target_id="app-01",
-        confidence_score=0.95, freshness_score=0.9,
+        tenant_id="acmecorp",
+        edge_type=EdgeType.MONITORS,
+        source_id="prometheus",
+        target_id="app-01",
+        confidence_score=0.95,
+        freshness_score=0.9,
     )
     json_str = edge.model_dump_json()
     parsed = json.loads(json_str)
@@ -512,25 +600,38 @@ def test_cuzedge_missing_source_id_raises():
     """source_id est obligatoire."""
     with pytest.raises(ValidationError):
         CuzEdge(
-            tenant_id="t1", edge_type=EdgeType.CALLS,
-            target_id="b", confidence_score=0.8, freshness_score=0.8,
+            tenant_id="t1",
+            edge_type=EdgeType.CALLS,
+            target_id="b",
+            confidence_score=0.8,
+            freshness_score=0.8,
         )
 
 
 def test_cuzedge_model_dump_contains_required_fields():
     """model_dump() de CuzEdge contient tous les champs attendus."""
     edge = CuzEdge(
-        tenant_id="t1", edge_type=EdgeType.SECURES,
-        source_id="iam", target_id="app",
-        confidence_score=0.9, freshness_score=0.85,
+        tenant_id="t1",
+        edge_type=EdgeType.SECURES,
+        source_id="iam",
+        target_id="app",
+        confidence_score=0.9,
+        freshness_score=0.85,
     )
     d = edge.model_dump()
     required_fields = [
-        "id", "tenant_id", "edge_type",
-        "source_id", "target_id",
-        "confidence_score", "freshness_score",
-        "sources", "attributes",
-        "created_at", "updated_at", "last_seen",
+        "id",
+        "tenant_id",
+        "edge_type",
+        "source_id",
+        "target_id",
+        "confidence_score",
+        "freshness_score",
+        "sources",
+        "attributes",
+        "created_at",
+        "updated_at",
+        "last_seen",
     ]
     for field in required_fields:
         assert field in d, f"Champ manquant dans model_dump() : {field}"
@@ -540,15 +641,22 @@ def test_cuzedge_model_dump_contains_required_fields():
 # SECTION 7 — Tests d'intégration nœud + arête (5 tests)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_node_and_edge_tenant_isolation():
     """Deux nœuds de tenants différents ne partagent pas d'id."""
     node1 = CuzNode(
-        tenant_id="tenant-a", node_type=NodeType.SERVER,
-        name="srv", confidence_score=0.9, freshness_score=0.9,
+        tenant_id="tenant-a",
+        node_type=NodeType.SERVER,
+        name="srv",
+        confidence_score=0.9,
+        freshness_score=0.9,
     )
     node2 = CuzNode(
-        tenant_id="tenant-b", node_type=NodeType.SERVER,
-        name="srv", confidence_score=0.9, freshness_score=0.9,
+        tenant_id="tenant-b",
+        node_type=NodeType.SERVER,
+        name="srv",
+        confidence_score=0.9,
+        freshness_score=0.9,
     )
     assert node1.id != node2.id
     assert node1.tenant_id != node2.tenant_id
@@ -557,12 +665,18 @@ def test_node_and_edge_tenant_isolation():
 def test_edge_links_two_nodes():
     """Une arête peut référencer les ids de deux nœuds."""
     server = CuzNode(
-        tenant_id="acmecorp", node_type=NodeType.SERVER,
-        name="srv-01", confidence_score=0.95, freshness_score=0.9,
+        tenant_id="acmecorp",
+        node_type=NodeType.SERVER,
+        name="srv-01",
+        confidence_score=0.95,
+        freshness_score=0.9,
     )
     app = CuzNode(
-        tenant_id="acmecorp", node_type=NodeType.APPLICATION,
-        name="api-01", confidence_score=0.9, freshness_score=0.85,
+        tenant_id="acmecorp",
+        node_type=NodeType.APPLICATION,
+        name="api-01",
+        confidence_score=0.9,
+        freshness_score=0.85,
     )
     edge = CuzEdge(
         tenant_id="acmecorp",
@@ -579,14 +693,19 @@ def test_edge_links_two_nodes():
 def test_vulnerability_node_with_affects_edge():
     """Un nœud VULNERABILITY lié à un SERVER via AFFECTS."""
     vuln = CuzNode(
-        tenant_id="acmecorp", node_type=NodeType.VULNERABILITY,
+        tenant_id="acmecorp",
+        node_type=NodeType.VULNERABILITY,
         name="CVE-2022-24999",
-        confidence_score=0.98, freshness_score=0.6,
+        confidence_score=0.98,
+        freshness_score=0.6,
         attributes={"cvss": 9.8, "epss": 0.78},
     )
     server = CuzNode(
-        tenant_id="acmecorp", node_type=NodeType.SERVER,
-        name="prod-srv-01", confidence_score=0.95, freshness_score=0.9,
+        tenant_id="acmecorp",
+        node_type=NodeType.SERVER,
+        name="prod-srv-01",
+        confidence_score=0.95,
+        freshness_score=0.9,
     )
     edge = CuzEdge(
         tenant_id="acmecorp",
@@ -603,13 +722,19 @@ def test_vulnerability_node_with_affects_edge():
 def test_multi_source_node_has_higher_confidence():
     """Un nœud confirmé par 2 sources a un confidence_score plus élevé."""
     node_single = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="srv", confidence_score=0.8, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="srv",
+        confidence_score=0.8,
+        freshness_score=0.9,
         sources=["servicenow"],
     )
     node_multi = CuzNode(
-        tenant_id="t1", node_type=NodeType.SERVER,
-        name="srv", confidence_score=0.96, freshness_score=0.9,
+        tenant_id="t1",
+        node_type=NodeType.SERVER,
+        name="srv",
+        confidence_score=0.96,
+        freshness_score=0.9,
         sources=["servicenow", "azure"],
     )
     assert node_multi.confidence_score > node_single.confidence_score
@@ -618,10 +743,11 @@ def test_multi_source_node_has_higher_confidence():
 def test_stale_node_low_freshness():
     """Un nœud non vu depuis longtemps a un freshness_score bas."""
     node = CuzNode(
-        tenant_id="t1", node_type=NodeType.USER,
+        tenant_id="t1",
+        node_type=NodeType.USER,
         name="old-user",
         confidence_score=0.8,
         freshness_score=0.02,  # Vu il y a très longtemps
-        last_seen=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        last_seen=datetime(2025, 1, 1, tzinfo=UTC),
     )
     assert node.freshness_score < 0.1

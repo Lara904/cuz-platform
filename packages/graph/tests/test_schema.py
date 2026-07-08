@@ -2,6 +2,7 @@
 """Validation que les contraintes et index Neo4j sont bien appliqués."""
 
 import os
+
 import pytest
 from neo4j import GraphDatabase
 
@@ -31,6 +32,7 @@ def get_indexes(driver):
 
 # ── Contraintes ────────────────────────────────────────────────────────────────
 
+
 def test_constraint_cuz_node_unique_exists(driver):
     """Contrainte d'unicité (tenant_id, id) sur CuzNode."""
     constraints = get_constraints(driver)
@@ -59,6 +61,7 @@ def test_constraints_count(driver):
 
 
 # ── Index ──────────────────────────────────────────────────────────────────────
+
 
 def test_index_tenant_type_exists(driver):
     """Index composite tenant_id + node_type."""
@@ -109,6 +112,4 @@ def test_indexes_count(driver):
     """Au moins 5 index CUz doivent être présents."""
     indexes = get_indexes(driver)
     cuz_indexes = [i for i in indexes if "cuz" in i.get("name", "")]
-    assert len(cuz_indexes) >= 5, (
-        f"Attendu >= 5 index CUz, trouvé : {len(cuz_indexes)}"
-    )
+    assert len(cuz_indexes) >= 5, f"Attendu >= 5 index CUz, trouvé : {len(cuz_indexes)}"

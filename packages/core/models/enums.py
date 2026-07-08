@@ -1,55 +1,55 @@
 # packages/core/models/enums.py
-from enum import Enum
+from enum import StrEnum
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     # Infrastructure
-    SERVER          = 'SERVER'
-    VIRTUAL_MACHINE = 'VIRTUAL_MACHINE'
-    CONTAINER       = 'CONTAINER'
-    CLUSTER         = 'CLUSTER'
-    NETWORK         = 'NETWORK'
+    SERVER = "SERVER"
+    VIRTUAL_MACHINE = "VIRTUAL_MACHINE"
+    CONTAINER = "CONTAINER"
+    CLUSTER = "CLUSTER"
+    NETWORK = "NETWORK"
     # Applications
-    APPLICATION     = 'APPLICATION'
-    API             = 'API'
-    DATABASE        = 'DATABASE'
-    QUEUE           = 'QUEUE'
+    APPLICATION = "APPLICATION"
+    API = "API"
+    DATABASE = "DATABASE"
+    QUEUE = "QUEUE"
     # Identités
-    USER            = 'USER'
-    SERVICE_ACCOUNT = 'SERVICE_ACCOUNT'
-    GROUP           = 'GROUP'
-    ROLE            = 'ROLE'
+    USER = "USER"
+    SERVICE_ACCOUNT = "SERVICE_ACCOUNT"
+    GROUP = "GROUP"
+    ROLE = "ROLE"
     # Cloud
-    CLOUD_ACCOUNT   = 'CLOUD_ACCOUNT'
-    STORAGE         = 'STORAGE'
-    FUNCTION        = 'FUNCTION'
+    CLOUD_ACCOUNT = "CLOUD_ACCOUNT"
+    STORAGE = "STORAGE"
+    FUNCTION = "FUNCTION"
     # Développement
-    REPOSITORY      = 'REPOSITORY'
-    PIPELINE        = 'PIPELINE'
-    ARTIFACT        = 'ARTIFACT'
+    REPOSITORY = "REPOSITORY"
+    PIPELINE = "PIPELINE"
+    ARTIFACT = "ARTIFACT"
     # Sécurité
-    VULNERABILITY   = 'VULNERABILITY'
-    THIRD_PARTY     = 'THIRD_PARTY'
+    VULNERABILITY = "VULNERABILITY"
+    THIRD_PARTY = "THIRD_PARTY"
 
 
-class EdgeType(str, Enum):
-    HOSTS           = 'HOSTS'
-    RUNS_ON         = 'RUNS_ON'
-    DEPENDS_ON      = 'DEPENDS_ON'
-    CALLS           = 'CALLS'
-    EXPOSES         = 'EXPOSES'
-    STORES_DATA_IN  = 'STORES_DATA_IN'
-    PRODUCES        = 'PRODUCES'
-    CONSUMES        = 'CONSUMES'
-    TRANSFERS_TO    = 'TRANSFERS_TO'
-    DEPLOYS         = 'DEPLOYS'
-    MONITORS        = 'MONITORS'
-    SECURES         = 'SECURES'
-    HAS_ROLE        = 'HAS_ROLE'
-    MEMBER_OF       = 'MEMBER_OF'
-    ALLOWS          = 'ALLOWS'
-    BLOCKS          = 'BLOCKS'
-    AFFECTS         = 'AFFECTS'
-    SUPPORTS        = 'SUPPORTS'
-    OWNED_BY        = 'OWNED_BY'
-    PART_OF         = 'PART_OF'
+class EdgeType(StrEnum):
+    HOSTS = "HOSTS"
+    RUNS_ON = "RUNS_ON"
+    DEPENDS_ON = "DEPENDS_ON"
+    CALLS = "CALLS"
+    EXPOSES = "EXPOSES"
+    STORES_DATA_IN = "STORES_DATA_IN"
+    PRODUCES = "PRODUCES"
+    CONSUMES = "CONSUMES"
+    TRANSFERS_TO = "TRANSFERS_TO"
+    DEPLOYS = "DEPLOYS"
+    MONITORS = "MONITORS"
+    SECURES = "SECURES"
+    HAS_ROLE = "HAS_ROLE"
+    MEMBER_OF = "MEMBER_OF"
+    ALLOWS = "ALLOWS"
+    BLOCKS = "BLOCKS"
+    AFFECTS = "AFFECTS"
+    SUPPORTS = "SUPPORTS"
+    OWNED_BY = "OWNED_BY"
+    PART_OF = "PART_OF"

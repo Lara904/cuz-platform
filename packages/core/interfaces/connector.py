@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, List
+from collections.abc import AsyncIterator
 
 from packages.core.models.events import RawEvent
-from abc import ABC, abstractmethod
-from typing import AsyncIterator, List
-from packages.core.models.events import RawEvent
+
 
 class IConnector(ABC):
     """Interface obligatoire pour tous les connecteurs CUz.
@@ -21,7 +19,7 @@ class IConnector(ABC):
         ...
 
     @abstractmethod
-    async def pull_full(self) -> List[RawEvent]:
+    async def pull_full(self) -> list[RawEvent]:
         """Scan complet de la source. Retourne tous les RawEvents.
         Idempotent : même appel = mêmes events (ne pas modifier l'état).
         """

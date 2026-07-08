@@ -1,7 +1,7 @@
 # packages/core/models/edge.py
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,12 +18,12 @@ class CuzEdge(BaseModel):
     # Qualité — OBLIGATOIRES
     confidence_score: float = Field(ge=0.0, le=1.0)
     freshness_score: float = Field(ge=0.0, le=1.0)
-    sources: List[str] = []
+    sources: list[str] = []
 
     # Temporalité
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_seen: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Attributs de la relation
-    attributes: Dict[str, Any] = {}
+    attributes: dict[str, Any] = {}

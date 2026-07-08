@@ -1,7 +1,7 @@
 # packages/core/models/node.py
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -16,26 +16,26 @@ class CuzNode(BaseModel):
     name: str
 
     # Identifiants externes (CMDB, ARM, GitHub, etc.)
-    external_id: Optional[str] = None
-    external_ids: Dict[str, str] = {}
+    external_id: str | None = None
+    external_ids: dict[str, str] = {}
 
     # Qualité de la donnée — OBLIGATOIRES
     confidence_score: float = Field(ge=0.0, le=1.0)
     freshness_score: float = Field(ge=0.0, le=1.0)
-    sources: List[str] = []
+    sources: list[str] = []
 
     # Temporalité
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_seen: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Données métier
-    attributes: Dict[str, Any] = {}
-    tags: Dict[str, str] = {}
+    attributes: dict[str, Any] = {}
+    tags: dict[str, str] = {}
 
-    @field_validator('confidence_score', 'freshness_score')
+    @field_validator("confidence_score", "freshness_score")
     @classmethod
     def validate_score(cls, v: float) -> float:
         if not 0.0 <= v <= 1.0:
-            raise ValueError(f'Score must be between 0.0 and 1.0, got {v}')
+            raise ValueError(f"Score must be between 0.0 and 1.0, got {v}")
         return round(v, 4)

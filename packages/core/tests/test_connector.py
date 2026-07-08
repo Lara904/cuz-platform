@@ -9,11 +9,10 @@ Lancer avec : pytest packages/core/tests/test_connector.py -v
 import pytest
 
 from packages.core.interfaces.mock_connector import MockConnector
-from packages.core.interfaces.connector import IConnector
 from packages.core.models.events import RawEvent
 
-
 # ── Contrat 1 : test_connection OK ────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_connector_connection_ok():
@@ -25,6 +24,7 @@ async def test_connector_connection_ok():
 
 # ── Contrat 2 : test_connection KO ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_connector_connection_failure_raises():
     """Un connecteur en échec lève une exception sur test_connection()."""
@@ -34,6 +34,7 @@ async def test_connector_connection_failure_raises():
 
 
 # ── Contrat 3 : pull_full retourne des RawEvents valides ──────────────────────
+
 
 @pytest.mark.asyncio
 async def test_connector_pull_returns_raw_events():
@@ -52,6 +53,7 @@ async def test_connector_pull_returns_raw_events():
 
 # ── Contrat 4 : idempotence de pull_full ──────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_connector_pull_is_idempotent():
     """Deux appels à pull_full() retournent le même nombre d'événements."""
@@ -63,6 +65,7 @@ async def test_connector_pull_is_idempotent():
 
 
 # ── Contrat 5 : subscribe_events yield des RawEvents ─────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_connector_subscribe_yields_raw_events():

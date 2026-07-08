@@ -1,13 +1,13 @@
 # packages/core/interfaces/mock_connector.py
 """Mock connecteur implémentant IConnector — utilisé uniquement pour les tests."""
 
-from typing import AsyncIterator, List
+import uuid
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 from packages.core.interfaces.connector import IConnector
 from packages.core.models.enums import NodeType
 from packages.core.models.events import EventType, RawEvent
-from datetime import datetime, timezone
-import uuid
 
 
 class MockConnector(IConnector):
@@ -23,7 +23,7 @@ class MockConnector(IConnector):
             raise ConnectionError("Mock connection failure")
         return True
 
-    async def pull_full(self) -> List[RawEvent]:
+    async def pull_full(self) -> list[RawEvent]:
         self._pull_count += 1
         return [
             RawEvent(
@@ -31,7 +31,7 @@ class MockConnector(IConnector):
                 tenant_id=self.tenant_id,
                 source="mock",
                 event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 raw_data={"name": "mock-server-01", "type": NodeType.SERVER},
             ),
             RawEvent(
@@ -39,7 +39,7 @@ class MockConnector(IConnector):
                 tenant_id=self.tenant_id,
                 source="mock",
                 event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 raw_data={"name": "mock-app-01", "type": NodeType.APPLICATION},
             ),
         ]
@@ -51,6 +51,6 @@ class MockConnector(IConnector):
                 tenant_id=self.tenant_id,
                 source="mock",
                 event_type=EventType.NODE_UPDATED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 raw_data={"name": f"mock-event-{i}"},
             )

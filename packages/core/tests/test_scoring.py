@@ -8,21 +8,22 @@ Couverture des 20 cas requis :
 """
 
 import math
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
 
 from packages.core.models.enums import NodeType
-from packages.core.scoring.confidence import compute_confidence, DEFAULT_SOURCE_WEIGHTS
-from packages.core.scoring.freshness import compute_freshness, HALF_LIFE_DAYS, DEFAULT_HALF_LIFE
-
+from packages.core.scoring.confidence import compute_confidence
+from packages.core.scoring.freshness import DEFAULT_HALF_LIFE, HALF_LIFE_DAYS, compute_freshness
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _last_seen(days_ago: float) -> datetime:
     """Retourne un datetime utcnow - days_ago jours, sans timezone (cohérent avec compute_freshness)."""
-    return datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return datetime.now(UTC) - timedelta(days=days_ago)
 
 
 def _expected_freshness(node_type: NodeType, days_ago: float) -> float:
@@ -36,8 +37,8 @@ def _expected_freshness(node_type: NodeType, days_ago: float) -> float:
 # BLOC 1 — Score de confiance (compute_confidence)
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestComputeConfidence:
 
+class TestComputeConfidence:
     # ── Cas 1 : liste vide → 0.0 (item P0.6 checklist) ──────────────────────
     def test_empty_sources_returns_zero(self):
         """Aucune source → confiance nulle."""
@@ -46,17 +47,17 @@ class TestComputeConfidence:
     # ── Cas 2 : mono-source azure (poids 0.95) ───────────────────────────────
     def test_mono_source_azure(self):
         """1 source connue → confidence == poids de la source."""
-        assert compute_confidence(['azure']) == 0.95
+        assert compute_confidence(["azure"]) == 0.95
 
     # ── Cas 3 : mono-source servicenow (poids 0.80) ──────────────────────────
     def test_mono_source_servicenow(self):
         """ServiceNow seul = 0.80 (CMDB manuel, poids plus faible)."""
-        assert compute_confidence(['servicenow']) == 0.80
+        assert compute_confidence(["servicenow"]) == 0.80
 
     # ── Cas 4 : mono-source source inconnue → fallback 0.5 ───────────────────
     def test_mono_source_unknown_falls_back_to_half(self):
         """Source non référencée → poids par défaut 0.5."""
-        score = compute_confidence(['datadog_unknown'])
+        score = compute_confidence(["datadog_unknown"])
         assert score == pytest.approx(0.5, abs=1e-4)
 
     # ── Cas 5 : 2 sources indépendantes (azure + entra_id) ───────────────────
@@ -65,7 +66,7 @@ class TestComputeConfidence:
         azure=0.95, entra_id=0.95
         confidence = 1 - (0.05 × 0.05) = 0.9975
         """
-        score = compute_confidence(['azure', 'entra_id'])
+        score = compute_confidence(["azure", "entra_id"])
         assert score == pytest.approx(0.9975, abs=1e-4)
 
     # ── Cas 6 : 2 sources, poids asymétriques (azure + servicenow) ───────────
@@ -74,7 +75,7 @@ class TestComputeConfidence:
         azure=0.95, servicenow=0.80
         confidence = 1 - (0.05 × 0.20) = 0.99
         """
-        score = compute_confidence(['azure', 'servicenow'])
+        score = compute_confidence(["azure", "servicenow"])
         assert score == pytest.approx(0.99, abs=1e-4)
 
     # ── Cas 7 : 2 sources, github + sentinel ─────────────────────────────────
@@ -84,7 +85,7 @@ class TestComputeConfidence:
         confidence = 1 - (0.10 × 0.15) = 0.985
         """
         expected = round(1 - (0.10 * 0.15), 4)
-        score = compute_confidence(['github', 'sentinel'])
+        score = compute_confidence(["github", "sentinel"])
         assert score == pytest.approx(expected, abs=1e-4)
 
     # ── Cas 8 : 3 sources (github + azure + servicenow) ──────────────────────
@@ -94,7 +95,7 @@ class TestComputeConfidence:
         confidence = 1 - (0.10 × 0.05 × 0.20) = 0.999
         """
         expected = round(1 - (0.10 * 0.05 * 0.20), 4)
-        score = compute_confidence(['github', 'azure', 'servicenow'])
+        score = compute_confidence(["github", "azure", "servicenow"])
         assert score == pytest.approx(expected, abs=1e-4)
 
     # ── Cas 9 : 3 sources dont une inconnue ──────────────────────────────────
@@ -104,35 +105,35 @@ class TestComputeConfidence:
         confidence = 1 - (0.05 × 0.08 × 0.50) = 0.998
         """
         expected = round(1 - (0.05 * 0.08 * 0.50), 4)
-        score = compute_confidence(['azure', 'kubernetes', 'mystery_source'])
+        score = compute_confidence(["azure", "kubernetes", "mystery_source"])
         assert score == pytest.approx(expected, abs=1e-4)
 
     # ── Cas 10 : score à la limite basse (poids unique très faible) ──────────
     def test_limit_low_single_source_custom_weight(self):
         """Source avec poids minimal = 0.01 → confidence voisine de 0.01."""
-        custom_weights = {'weak_source': 0.01}
-        score = compute_confidence(['weak_source'], weights=custom_weights)
+        custom_weights = {"weak_source": 0.01}
+        score = compute_confidence(["weak_source"], weights=custom_weights)
         assert score == pytest.approx(0.01, abs=1e-4)
 
     # ── Cas 11 : score à la limite haute (poids unique = 1.0) ────────────────
     def test_limit_high_single_source_perfect_weight(self):
         """Source avec poids = 1.0 → confidence = 1.0 (certitude absolue)."""
-        custom_weights = {'perfect_source': 1.0}
-        score = compute_confidence(['perfect_source'], weights=custom_weights)
+        custom_weights = {"perfect_source": 1.0}
+        score = compute_confidence(["perfect_source"], weights=custom_weights)
         assert score == pytest.approx(1.0, abs=1e-4)
 
     # ── Cas 12 : ordre des sources n'affecte pas le résultat ─────────────────
     def test_source_order_is_commutative(self):
         """La formule bayésienne est commutative : l'ordre des sources importe peu."""
-        s1 = compute_confidence(['azure', 'servicenow', 'github'])
-        s2 = compute_confidence(['github', 'azure', 'servicenow'])
+        s1 = compute_confidence(["azure", "servicenow", "github"])
+        s2 = compute_confidence(["github", "azure", "servicenow"])
         assert s1 == s2
 
     # ── Cas 13 : weights personnalisés par tenant ─────────────────────────────
     def test_custom_tenant_weights_override_defaults(self):
         """Un tenant peut redéfinir les poids — vérifier que le custom l'emporte."""
-        tenant_weights = {'servicenow': 0.60}   # Ce tenant fait moins confiance au CMDB
-        score = compute_confidence(['servicenow'], weights=tenant_weights)
+        tenant_weights = {"servicenow": 0.60}  # Ce tenant fait moins confiance au CMDB
+        score = compute_confidence(["servicenow"], weights=tenant_weights)
         assert score == pytest.approx(0.60, abs=1e-4)
         # Le poids par défaut (0.80) ne doit PAS être utilisé
         assert score != pytest.approx(0.80, abs=1e-4)
@@ -142,8 +143,8 @@ class TestComputeConfidence:
 # BLOC 2 — Score de fraîcheur (compute_freshness)
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestComputeFreshness:
 
+class TestComputeFreshness:
     # ── Cas 14 : t = 0 → score ≈ 1.0 (quel que soit le type) ────────────────
     def test_freshness_at_t0_is_one(self):
         """Un nœud vu à l'instant T est à fraîcheur maximale, quel que soit son type."""
@@ -153,8 +154,9 @@ class TestComputeFreshness:
             NodeType.VULNERABILITY,
         ]:
             score = compute_freshness(node_type, _last_seen(0))
-            assert score == pytest.approx(1.0, abs=0.005), \
+            assert score == pytest.approx(1.0, abs=0.005), (
                 f"{node_type.value} à t=0 devrait être ~1.0, got {score}"
+            )
 
     # ── Cas 15 : VM / Serveur — demi-vie 7 jours → freshness(7j) ≈ 0.50 ─────
     def test_virtual_machine_decay_at_7_days(self):
@@ -166,7 +168,7 @@ class TestComputeFreshness:
     def test_virtual_machine_decay_at_30_days(self):
         """VM à 30 j : très dégradé, le guide indique ~0.06."""
         score = compute_freshness(NodeType.VIRTUAL_MACHINE, _last_seen(30))
-        assert score == pytest.approx(0.051, abs=0.01)   # valeur exacte : exp(-ln2/7*30) ≈ 0.0513
+        assert score == pytest.approx(0.051, abs=0.01)  # valeur exacte : exp(-ln2/7*30) ≈ 0.0513
 
     # ── Cas 17 : Utilisateur IAM — demi-vie 1 jour → chute rapide ────────────
     def test_user_iam_decay_at_7_days(self):
@@ -244,8 +246,9 @@ class TestComputeFreshness:
         CONTAINER n'est pas dans le dict → demi-vie de 14 jours.
         À 14 jours le score doit être ≈ 0.50.
         """
-        assert NodeType.CONTAINER not in HALF_LIFE_DAYS, \
+        assert NodeType.CONTAINER not in HALF_LIFE_DAYS, (
             "CONTAINER ne doit pas être dans HALF_LIFE_DAYS pour que ce test soit pertinent"
+        )
         score = compute_freshness(NodeType.CONTAINER, _last_seen(14))
         assert score == pytest.approx(0.50, abs=0.01)
 
@@ -255,8 +258,8 @@ class TestComputeFreshness:
         Règle métier : aucune action auto si confidence_score < 0.7.
         Une source avec poids 0.6 doit passer en dessous du seuil.
         """
-        custom = {'weak_cmdb': 0.60}
-        score = compute_confidence(['weak_cmdb'], weights=custom)
+        custom = {"weak_cmdb": 0.60}
+        score = compute_confidence(["weak_cmdb"], weights=custom)
         assert score < 0.7, "Ce nœud doit bloquer l'action automatique"
 
     def test_two_sources_push_above_threshold(self):
@@ -264,6 +267,6 @@ class TestComputeFreshness:
         Même source faible (0.60) + azure (0.95) → confiance > 0.7.
         Le croisement de sources permet de débloquer l'action auto.
         """
-        custom = {'weak_cmdb': 0.60, 'azure': 0.95}
-        score = compute_confidence(['weak_cmdb', 'azure'], weights=custom)
+        custom = {"weak_cmdb": 0.60, "azure": 0.95}
+        score = compute_confidence(["weak_cmdb", "azure"], weights=custom)
         assert score >= 0.7
