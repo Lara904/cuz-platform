@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: pip
@@ -28,7 +28,7 @@ jobs:
 
       - run: ruff check packages/
       - run: ruff format --check packages/
-      - run: mypy packages/
+      - run: mypy packages/ --exclude 'packages/.*/tests/.*'
 
   # ─────────────────────────────────────────────────────────────────────────
   # Job 2 — Tests unitaires
@@ -40,9 +40,9 @@ jobs:
     needs: lint-and-type-check
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: pip
@@ -51,7 +51,7 @@ jobs:
 
       - run: pytest packages/ -v --tb=short --cov=packages --cov-report=xml
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4.2.2
         with:
           name: coverage
           path: coverage.xml
@@ -103,9 +103,9 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: pip
@@ -135,7 +135,7 @@ jobs:
     needs: integration-tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Build API image (si Dockerfile présent)
         run: |

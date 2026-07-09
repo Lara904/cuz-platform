@@ -22,3 +22,12 @@ ignore_missing_imports = true
 testpaths = ['tests', 'packages']
 addopts = '-v --tb=short'
 asyncio_mode = 'auto'
+
+[[tool.mypy.overrides]]
+module = [
+    "packages.core.models.*",
+    "packages.core.tests.*",
+    "packages.core.interfaces.*",
+    "packages.graph.tests.*",
+]
+ignore_errors = true

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from packages.core.models.enums import NodeType
 
 # Demi-vie par type de nœud (en jours)
-HALF_LIFE_DAYS: dict = {
+HALF_LIFE_DAYS: dict[NodeType, int] = {
     NodeType.VIRTUAL_MACHINE: 7,
     NodeType.SERVER: 7,
     NodeType.USER: 1,

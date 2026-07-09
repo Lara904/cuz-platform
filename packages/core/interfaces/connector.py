@@ -9,7 +9,7 @@ class IConnector(ABC):
     Un connecteur = un sous-dossier dans packages/connectors/.
     Jamais d'accès direct à Neo4j depuis un connecteur."""
 
-    def __init__(self, tenant_id: str, config: dict):
+    def __init__(self, tenant_id: str, config: dict[str, object]):
         self.tenant_id = tenant_id
         self.config = config
 
@@ -26,7 +26,7 @@ class IConnector(ABC):
         ...
 
     @abstractmethod
-    async def subscribe_events(self) -> AsyncIterator[RawEvent]:
+    def subscribe_events(self) -> AsyncIterator[RawEvent]:
         """Souscription aux événements temps réel (webhooks, watch, etc.).
         Yield des RawEvents au fur et à mesure de leur réception.
         """

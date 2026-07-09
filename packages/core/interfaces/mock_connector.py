@@ -13,7 +13,7 @@ from packages.core.models.events import EventType, RawEvent
 class MockConnector(IConnector):
     """Implémentation minimale de IConnector pour valider le contrat."""
 
-    def __init__(self, tenant_id: str, config: dict, should_fail: bool = False):
+    def __init__(self, tenant_id: str, config: dict[str, object], should_fail: bool = False):
         super().__init__(tenant_id, config)
         self.should_fail = should_fail
         self._pull_count = 0
