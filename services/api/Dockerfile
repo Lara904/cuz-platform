@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copier uniquement les requirements pour exploiter le cache Docker
-COPY requirements.txt .
+COPY services/api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copier le code source complet
