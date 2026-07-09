@@ -14,6 +14,7 @@ Couvre :
 Prérequis : docker compose up -d && uvicorn services.api.main:app --port 8000
 """
 import pytest
+pytestmark = pytest.mark.skip(reason="Tests d'intégration live — lancer manuellement avec l'API active")
 import httpx
 
 BASE_URL = "http://localhost:8000"
