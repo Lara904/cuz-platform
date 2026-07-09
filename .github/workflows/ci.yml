@@ -40,9 +40,9 @@ jobs:
     needs: lint-and-type-check
 
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5.6.0
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
@@ -51,7 +51,7 @@ jobs:
 
       - run: pytest packages/ -v --tb=short --cov=packages --cov-report=xml
 
-      - uses: actions/upload-artifact@v4.2.2
+      - uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: coverage.xml
