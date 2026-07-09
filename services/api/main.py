@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.api.middleware.logging import LoggingMiddleware
 from services.api.middleware.rate_limit import RateLimitMiddleware
 from services.api.routers import auth, connectors, health, tenants
+from services.api.routers.tenants import init_db as init_tenants_db
+from services.api.routers.connectors import init_db as init_connectors_db
 
 
 @asynccontextmanager
@@ -17,6 +19,8 @@ async def lifespan(app: FastAPI):
     """Initialise les ressources au démarrage et les libère à l'arrêt."""
     # Startup : vérifier que PostgreSQL et Redis sont accessibles
     print("CUz API démarrage...")
+    await init_tenants_db()
+    await init_connectors_db()
     yield
     # Shutdown
     print("CUz API arrêt.")
