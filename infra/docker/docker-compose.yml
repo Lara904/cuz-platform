@@ -99,7 +99,7 @@ services:
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_USER:-acmeadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-CHANGE_ME}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-CuzMinioPass123}
     volumes:
       - minio_data:/data
     healthcheck:
