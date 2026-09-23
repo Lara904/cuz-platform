@@ -26,3 +26,6 @@ data/
 # Credentials connecteurs (JAMAIS en clair)
 packages/connectors/*/config.yaml
 infra/terraform/*.tfvars
+
+ac8_scenarios.sh
+
