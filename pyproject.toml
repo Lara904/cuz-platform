@@ -31,3 +31,5 @@ module = [
     "packages.graph.tests.*",
 ]
 ignore_errors = true
+
+pythonpath = ["."]

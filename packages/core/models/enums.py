@@ -30,6 +30,8 @@ class NodeType(StrEnum):
     # Sécurité
     VULNERABILITY = "VULNERABILITY"
     THIRD_PARTY = "THIRD_PARTY"
+    # Contract legacy
+    CONTRACT = "CONTRACT"
 
 
 class EdgeType(StrEnum):
@@ -53,3 +55,5 @@ class EdgeType(StrEnum):
     SUPPORTS = "SUPPORTS"
     OWNED_BY = "OWNED_BY"
     PART_OF = "PART_OF"
+    GOVERNED_BY = "GOVERNED_BY"
+    COVERS = "COVERS"
