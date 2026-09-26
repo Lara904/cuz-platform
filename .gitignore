@@ -28,4 +28,8 @@ packages/connectors/*/config.yaml
 infra/terraform/*.tfvars
 
 ac8_scenarios.sh
+ac9_register_connectors.sh
+
+DEVIATIONS.md 
+
 
