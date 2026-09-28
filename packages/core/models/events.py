@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    pass
+from packages.core.models.node import CuzNode
+from packages.core.models.edge import CuzEdge
 
 
 class EventType(StrEnum):
@@ -41,6 +41,6 @@ class NormalizedEvent(BaseModel):
     source: str
     event_type: EventType
     timestamp: datetime
-    node: Any | None = None  # CuzNode à l'exécution
-    edge: Any | None = None  # CuzEdge à l'exécution
+    node: Optional[CuzNode] = None   # inchangé
+    edge: Optional[CuzEdge] = None   # NOUVEAU (V3)
     schema_version: str = "1.0"

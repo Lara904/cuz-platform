@@ -22,6 +22,12 @@ class ServiceNowMapper:
         node_type = TABLE_TO_NODE_TYPE.get(table)
         if not node_type:
             return None
+
+        # FIX-1 : distinguer un prestataire tiers d'une application interne
+        # sur cmdb_ci_service, selon l'attribut u_vendor_type du CI ServiceNow.
+        if table == "cmdb_ci_service" and rec.get("u_vendor_type") == "third_party":
+            node_type = NodeType.THIRD_PARTY
+
         name = rec.get("name") or rec.get("sys_id", "unknown")
         last_seen = datetime.now(timezone.utc)
         return CuzNode(
@@ -43,6 +49,7 @@ class ServiceNowMapper:
                 "exit_plan_status":   rec.get("exit_plan_status"),
                 "vendor":             rec.get("vendor"),
                 "support_group":      rec.get("support_group"),
+                "u_vendor_type":      rec.get("u_vendor_type"),
             },
             tags={
                 "source":      "servicenow",
