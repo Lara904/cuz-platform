@@ -1,8 +1,10 @@
 # packages/ingestion/tests/test_pipeline.py
 import uuid
-from datetime import datetime, timezone
-from packages.core.models.events import RawEvent, EventType
+from datetime import UTC, datetime
+
+from packages.core.models.events import EventType, RawEvent
 from packages.ingestion.normalizer import Normalizer
+
 
 def make_raw(source: str, raw_data: dict, tenant: str = "acmecorp") -> RawEvent:
     return RawEvent(
@@ -10,7 +12,7 @@ def make_raw(source: str, raw_data: dict, tenant: str = "acmecorp") -> RawEvent:
         tenant_id=tenant,
         source=source,
         event_type=EventType.NODE_CREATED,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         raw_data=raw_data,
     )
 
@@ -71,7 +73,7 @@ def test_normalize_unknown_source_returns_empty_list():
     results = n.normalize(raw)
     assert results == []
 
-def test_gitea_repo_with_N_deps_produces_1_plus_2N():
+def test_gitea_repo_with_n_deps_produces_1_plus_2n():
     """Vérifie la formule 1+2N pour N=3 dépendances."""
     n = Normalizer()
     raw = make_raw("gitea", {
@@ -86,18 +88,18 @@ def test_gitea_repo_with_N_deps_produces_1_plus_2N():
         ]
     })
     results = n.normalize(raw)
-    N = 3
-    assert len(results) == 1 + 2 * N   # 7
+    n_deps = 3
+    assert len(results) == 1 + 2 * n_deps   # 7
     node_events = [r for r in results if r.node is not None]
     edge_events = [r for r in results if r.edge is not None]
-    assert len(node_events) == N + 1    # repo + 3 deps
-    assert len(edge_events) == N        # 3 DEPENDS_ON
+    assert len(node_events) == n_deps + 1    # repo + 3 deps
+    assert len(edge_events) == n_deps        # 3 DEPENDS_ON
 
 
 def test_idempotence_100_duplicates():
     """100 copies du même event_id → 1 seul traitement."""
     from packages.ingestion.consumer import SEEN_EVENT_IDS, PipelineConsumer
-    
+
     processed = []
     consumer = PipelineConsumer()
     event_id = str(uuid.uuid4())

@@ -1,12 +1,13 @@
 # packages/connectors/entra_id/connector.py
-import os
 import asyncio
 import uuid
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+
 import httpx
-from datetime import datetime, timezone
-from typing import AsyncIterator, List, Optional
+
 from packages.core.interfaces.connector import IConnector
-from packages.core.models.events import RawEvent, EventType
+from packages.core.models.events import EventType, RawEvent
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -17,11 +18,11 @@ class EntraIDConnector(IConnector):
         self.entra_tenant_id = entra_tenant_id  # Azure tenant
         self.client_id = client_id
         self.client_secret = client_secret
-        self._token: Optional[str] = None
-        self._token_expiry: Optional[datetime] = None
+        self._token: str | None = None
+        self._token_expiry: datetime | None = None
 
     async def _get_token(self) -> str:
-        if self._token and self._token_expiry and                 datetime.now(timezone.utc) < self._token_expiry:
+        if self._token and self._token_expiry and                 datetime.now(UTC) < self._token_expiry:
             return self._token
         url = f"https://login.microsoftonline.com/{self.entra_tenant_id}/oauth2/v2.0/token"
         data = {
@@ -37,7 +38,7 @@ class EntraIDConnector(IConnector):
             self._token = resp["access_token"]
             expires_in = resp.get("expires_in", 3600)
             from datetime import timedelta
-            self._token_expiry = datetime.now(timezone.utc) +                                  timedelta(seconds=expires_in - 60)
+            self._token_expiry = datetime.now(UTC) +                                  timedelta(seconds=expires_in - 60)
             return self._token
 
     async def test_connection(self) -> bool:
@@ -50,7 +51,7 @@ class EntraIDConnector(IConnector):
         except Exception:
             return False
 
-    async def _get_all_pages(self, url: str) -> List[dict]:
+    async def _get_all_pages(self, url: str) -> list[dict]:
         token = await self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
         results = []
@@ -63,7 +64,7 @@ class EntraIDConnector(IConnector):
                 url = data.get("@odata.nextLink")
         return results
 
-    async def _get_mfa_methods(self, user_id: str) -> List[dict]:
+    async def _get_mfa_methods(self, user_id: str) -> list[dict]:
         token = await self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{GRAPH_BASE}/users/{user_id}/authentication/methods"
@@ -76,7 +77,7 @@ class EntraIDConnector(IConnector):
             pass
         return []
 
-    async def pull_full(self) -> List[RawEvent]:
+    async def pull_full(self) -> list[RawEvent]:
         events = []
         users = await self._get_all_pages(
             f"{GRAPH_BASE}/users?$select=id,displayName,userPrincipalName,"
@@ -94,7 +95,7 @@ class EntraIDConnector(IConnector):
                 tenant_id=self.tenant_id,
                 source="entra_id",
                 event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 raw_data={"object_type": "user", "record": user},
             ))
         sps = await self._get_all_pages(
@@ -107,7 +108,7 @@ class EntraIDConnector(IConnector):
                 tenant_id=self.tenant_id,
                 source="entra_id",
                 event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 raw_data={"object_type": "service_principal", "record": sp},
             ))
         return events

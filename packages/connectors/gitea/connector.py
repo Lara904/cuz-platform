@@ -1,13 +1,16 @@
 # packages/connectors/gitea/connector.py
-import os
-import json
 import asyncio
+import json
+import os
 import uuid
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+
 import httpx
-from datetime import datetime, timezone
-from typing import AsyncIterator, List, Optional
+
 from packages.core.interfaces.connector import IConnector
-from packages.core.models.events import RawEvent, EventType
+from packages.core.models.events import EventType, RawEvent
+
 
 class GiteaConnector(IConnector):
     def __init__(self, tenant_id: str, base_url: str,
@@ -25,7 +28,7 @@ class GiteaConnector(IConnector):
             r = await c.get(f"{self.base_url}/api/v1/user")
             return r.status_code == 200
 
-    async def _get_repos(self, client: httpx.AsyncClient) -> List[dict]:
+    async def _get_repos(self, client: httpx.AsyncClient) -> list[dict]:
         r = await client.get(
             f"{self.base_url}/api/v1/orgs/{self.org}/repos",
             params={"limit": 50}
@@ -34,7 +37,7 @@ class GiteaConnector(IConnector):
         return r.json()
 
     async def _get_file(self, client: httpx.AsyncClient,
-                        owner: str, repo: str, path: str) -> Optional[str]:
+                        owner: str, repo: str, path: str) -> str | None:
         r = await client.get(
             f"{self.base_url}/api/v1/repos/{owner}/{repo}/raw/{path}"
         )
@@ -43,7 +46,7 @@ class GiteaConnector(IConnector):
         return None
 
     def _parse_dependencies(self, package_json: str,
-                            requirements_txt: str) -> List[dict]:
+                            requirements_txt: str) -> list[dict]:
         deps = []
         if package_json:
             try:
@@ -92,7 +95,7 @@ class GiteaConnector(IConnector):
         )
         return r.status_code in (200, 201)
 
-    async def pull_full(self) -> List[RawEvent]:
+    async def pull_full(self) -> list[RawEvent]:
         events = []
         webhook_url = os.getenv(
             "CUZ_WEBHOOK_URL",
@@ -114,7 +117,7 @@ class GiteaConnector(IConnector):
                     tenant_id=self.tenant_id,
                     source="gitea",
                     event_type=EventType.NODE_CREATED,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                     raw_data={
                         "object_type":   "repository",
                         "repo_id":       str(repo["id"]),

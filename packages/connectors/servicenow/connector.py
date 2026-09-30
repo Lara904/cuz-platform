@@ -1,14 +1,14 @@
 # packages/connectors/servicenow/connector.py
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import AsyncIterator, List, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
-from packages.core.interfaces.connector import IConnector
-from packages.core.models.events import RawEvent, EventType
 from packages.connectors.servicenow.mapper import ServiceNowMapper
+from packages.core.interfaces.connector import IConnector
+from packages.core.models.events import EventType, RawEvent
 
 CMDB_TABLES = [
     "cmdb_ci_server",
@@ -48,8 +48,8 @@ class ServiceNowConnector(IConnector):
         self.password = password
         self.mapper = ServiceNowMapper(tenant_id)
 
-        self._token: Optional[str] = None
-        self._token_expiry: Optional[datetime] = None
+        self._token: str | None = None
+        self._token_expiry: datetime | None = None
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ class ServiceNowConnector(IConnector):
         if (
             self._token
             and self._token_expiry
-            and datetime.now(timezone.utc) < self._token_expiry
+            and datetime.now(UTC) < self._token_expiry
         ):
             return self._token
 
@@ -80,7 +80,7 @@ class ServiceNowConnector(IConnector):
         self._token = resp["access_token"]
         expires_in = resp.get("expires_in", 1800)  # ServiceNow : 1800s par défaut
         # marge de sécurité de 60s pour éviter d'utiliser un token qui expire
-        self._token_expiry = datetime.now(timezone.utc) + timedelta(
+        self._token_expiry = datetime.now(UTC) + timedelta(
             seconds=expires_in - 60
         )
         return self._token
@@ -103,8 +103,8 @@ class ServiceNowConnector(IConnector):
         self,
         client: httpx.AsyncClient,
         table: str,
-        updated_after: Optional[datetime] = None,
-    ) -> List[dict]:
+        updated_after: datetime | None = None,
+    ) -> list[dict]:
         url = f"{self.instance_url}/api/now/table/{table}"
         params = {
             "sysparm_limit": 500,
@@ -129,7 +129,7 @@ class ServiceNowConnector(IConnector):
             offset += 500
         return results
 
-    async def pull_full(self) -> List[RawEvent]:
+    async def pull_full(self) -> list[RawEvent]:
         events = []
         async with httpx.AsyncClient(timeout=30) as client:
             for table in CMDB_TABLES:
@@ -141,7 +141,7 @@ class ServiceNowConnector(IConnector):
                             tenant_id=self.tenant_id,
                             source="servicenow",
                             event_type=EventType.NODE_CREATED,
-                            timestamp=datetime.now(timezone.utc),
+                            timestamp=datetime.now(UTC),
                             raw_data={"table": table, "record": rec},
                             schema_version="1.0",
                         )
@@ -153,7 +153,7 @@ class ServiceNowConnector(IConnector):
         last_pull = None
         while True:
             updated_after = last_pull
-            last_pull = datetime.now(timezone.utc)
+            last_pull = datetime.now(UTC)
             async with httpx.AsyncClient(timeout=30) as client:
                 for table in CMDB_TABLES:
                     records = await self._fetch_table(client, table, updated_after)
@@ -163,7 +163,7 @@ class ServiceNowConnector(IConnector):
                             tenant_id=self.tenant_id,
                             source="servicenow",
                             event_type=EventType.NODE_UPDATED,
-                            timestamp=datetime.now(timezone.utc),
+                            timestamp=datetime.now(UTC),
                             raw_data={"table": table, "record": rec},
                         )
             await asyncio.sleep(3600)  # poll horaire

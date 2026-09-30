@@ -1,8 +1,8 @@
 # packages/ingestion/producer.py
-import json
-from datetime import datetime
 from confluent_kafka import Producer
+
 from packages.core.models.events import RawEvent
+
 
 class EventProducer:
     def __init__(self, bootstrap_servers: str = "localhost:19092"):

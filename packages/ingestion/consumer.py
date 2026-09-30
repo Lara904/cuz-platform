@@ -1,7 +1,8 @@
 # packages/ingestion/consumer.py
-import json
 import logging
+
 from confluent_kafka import Consumer, KafkaError, Producer
+
 from packages.core.models.events import RawEvent
 from packages.ingestion.normalizer import Normalizer
 

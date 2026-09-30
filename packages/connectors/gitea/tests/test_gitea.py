@@ -1,9 +1,12 @@
 # packages/connectors/gitea/tests/test_gitea.py
-import pytest
 import os
+
+import pytest
+
 from packages.connectors.gitea.connector import GiteaConnector
 from packages.connectors.gitea.mapper import GiteaMapper
-from packages.core.models.enums import NodeType, EdgeType
+from packages.core.models.enums import EdgeType, NodeType
+
 
 @pytest.fixture
 def connector():
@@ -46,8 +49,6 @@ def test_mapper_dependency_node_type():
 
 def test_mapper_edge_type():
     mapper = GiteaMapper("acmecorp")
-    from packages.core.models.node import CuzNode
-    from packages.core.models.enums import NodeType
     repo = mapper.map_repo({"repo_id": "1", "name": "backend",
                             "full_name": "acmecorp/backend",
                             "private": True, "default_branch": "main",

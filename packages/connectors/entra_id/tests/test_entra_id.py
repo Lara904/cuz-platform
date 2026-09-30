@@ -1,9 +1,12 @@
 # packages/connectors/entra_id/tests/test_entra_id.py
-import pytest
 import os
+
+import pytest
+
 from packages.connectors.entra_id.connector import EntraIDConnector
 from packages.connectors.entra_id.mapper import EntraIDMapper
 from packages.core.models.enums import NodeType
+
 
 @pytest.fixture
 def connector():

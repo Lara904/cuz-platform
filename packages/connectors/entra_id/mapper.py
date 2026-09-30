@@ -1,15 +1,17 @@
 # packages/connectors/entra_id/mapper.py
-from datetime import datetime, timezone
-from packages.core.models.node import CuzNode
+from datetime import UTC, datetime
+
 from packages.core.models.enums import NodeType
+from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
+
 
 class EntraIDMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
     def map_user(self, rec: dict) -> CuzNode:
-        last_seen = datetime.now(timezone.utc)
+        last_seen = datetime.now(UTC)
         return CuzNode(
             tenant_id=self.tenant_id,
             node_type=NodeType.USER,
@@ -32,11 +34,11 @@ class EntraIDMapper:
         )
 
     def map_service_principal(self, rec: dict) -> CuzNode:
-        last_seen = datetime.now(timezone.utc)
+        last_seen = datetime.now(UTC)
         creds = rec.get("passwordCredentials", [])
         expired = any(
             c.get("endDateTime") and
-            c["endDateTime"] < datetime.now(timezone.utc).isoformat()
+            c["endDateTime"] < datetime.now(UTC).isoformat()
             for c in creds
         )
         return CuzNode(

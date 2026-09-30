@@ -1,15 +1,16 @@
 # packages/connectors/minio/connector.py
-import os
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
-from typing import AsyncIterator, List
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+
 from minio import Minio
-from minio.error import S3Error
-from packages.core.interfaces.connector import IConnector
-from packages.core.models.events import RawEvent, EventType
+
 from packages.connectors.minio_connector.mapper import MinIOMapper
+from packages.core.interfaces.connector import IConnector
+from packages.core.models.events import EventType, RawEvent
+
 
 class MinIOConnector(IConnector):
     def __init__(self, tenant_id: str, endpoint: str,
@@ -52,7 +53,7 @@ class MinIOConnector(IConnector):
         except Exception:
             return {}
 
-    def _list_objects_with_tags(self, bucket_name: str) -> List[dict]:
+    def _list_objects_with_tags(self, bucket_name: str) -> list[dict]:
         objects = []
         try:
             for obj in self.client.list_objects(bucket_name, recursive=True):
@@ -73,7 +74,7 @@ class MinIOConnector(IConnector):
             pass
         return objects
 
-    async def pull_full(self) -> List[RawEvent]:
+    async def pull_full(self) -> list[RawEvent]:
         events = []
         buckets = self.client.list_buckets()
         for bucket in buckets:
@@ -94,7 +95,7 @@ class MinIOConnector(IConnector):
                 tenant_id=self.tenant_id,
                 source="minio",
                 event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 raw_data=raw,
             ))
         return events

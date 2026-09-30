@@ -1,14 +1,12 @@
 # packages/ingestion/normalizer.py
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
-from packages.core.models.events import RawEvent, NormalizedEvent, EventType
-from packages.core.models.node import CuzNode
-from packages.core.models.edge import CuzEdge
-from packages.connectors.servicenow.mapper import ServiceNowMapper
-from packages.connectors.minio_connector.mapper import MinIOMapper
+
 from packages.connectors.entra_id.mapper import EntraIDMapper
 from packages.connectors.gitea.mapper import GiteaMapper
+from packages.connectors.minio_connector.mapper import MinIOMapper
+from packages.connectors.servicenow.mapper import ServiceNowMapper
+from packages.core.models.events import NormalizedEvent, RawEvent
+
 
 class Normalizer:
     def __init__(self):

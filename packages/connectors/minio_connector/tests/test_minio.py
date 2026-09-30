@@ -1,9 +1,12 @@
 # packages/connectors/minio/tests/test_minio.py
-import pytest
 import os
+
+import pytest
+
 from packages.connectors.minio_connector.connector import MinIOConnector
 from packages.connectors.minio_connector.mapper import MinIOMapper
 from packages.core.models.enums import NodeType
+
 
 @pytest.fixture
 def connector():

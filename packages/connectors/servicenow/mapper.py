@@ -1,8 +1,8 @@
 # packages/connectors/servicenow/mapper.py
-from datetime import datetime, timezone
-from typing import Optional
-from packages.core.models.node import CuzNode
+from datetime import UTC, datetime
+
 from packages.core.models.enums import NodeType
+from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
 
 TABLE_TO_NODE_TYPE = {
@@ -18,7 +18,7 @@ class ServiceNowMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_ci(self, table: str, rec: dict) -> Optional[CuzNode]:
+    def map_ci(self, table: str, rec: dict) -> CuzNode | None:
         node_type = TABLE_TO_NODE_TYPE.get(table)
         if not node_type:
             return None
@@ -29,7 +29,7 @@ class ServiceNowMapper:
             node_type = NodeType.THIRD_PARTY
 
         name = rec.get("name") or rec.get("sys_id", "unknown")
-        last_seen = datetime.now(timezone.utc)
+        last_seen = datetime.now(UTC)
         return CuzNode(
             tenant_id=self.tenant_id,
             node_type=node_type,
