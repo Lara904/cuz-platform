@@ -11,10 +11,12 @@ from packages.core.models.events import EventType, RawEvent
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
+
 class EntraIDConnector(IConnector):
-    def __init__(self, tenant_id_cuz: str, entra_tenant_id: str,
-                 client_id: str, client_secret: str):
-        self.tenant_id = tenant_id_cuz          # CUz tenant
+    def __init__(
+        self, tenant_id_cuz: str, entra_tenant_id: str, client_id: str, client_secret: str
+    ):
+        self.tenant_id = tenant_id_cuz  # CUz tenant
         self.entra_tenant_id = entra_tenant_id  # Azure tenant
         self.client_id = client_id
         self.client_secret = client_secret
@@ -22,14 +24,14 @@ class EntraIDConnector(IConnector):
         self._token_expiry: datetime | None = None
 
     async def _get_token(self) -> str:
-        if self._token and self._token_expiry and                 datetime.now(UTC) < self._token_expiry:
+        if self._token and self._token_expiry and datetime.now(UTC) < self._token_expiry:
             return self._token
         url = f"https://login.microsoftonline.com/{self.entra_tenant_id}/oauth2/v2.0/token"
         data = {
-            "grant_type":    "client_credentials",
-            "client_id":     self.client_id,
+            "grant_type": "client_credentials",
+            "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "scope":         "https://graph.microsoft.com/.default",
+            "scope": "https://graph.microsoft.com/.default",
         }
         async with httpx.AsyncClient(timeout=20) as client:
             r = await client.post(url, data=data)
@@ -38,7 +40,8 @@ class EntraIDConnector(IConnector):
             self._token = resp["access_token"]
             expires_in = resp.get("expires_in", 3600)
             from datetime import timedelta
-            self._token_expiry = datetime.now(UTC) +                                  timedelta(seconds=expires_in - 60)
+
+            self._token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
             return self._token
 
     async def test_connection(self) -> bool:
@@ -85,32 +88,38 @@ class EntraIDConnector(IConnector):
         )
         for user in users:
             mfa_methods = await self._get_mfa_methods(user["id"])
-            strong = [m for m in mfa_methods
-                      if m.get("@odata.type") not in
-                      ["#microsoft.graph.passwordAuthenticationMethod"]]
+            strong = [
+                m
+                for m in mfa_methods
+                if m.get("@odata.type") not in ["#microsoft.graph.passwordAuthenticationMethod"]
+            ]
             user["mfa_methods"] = mfa_methods
             user["has_mfa"] = len(strong) > 0
-            events.append(RawEvent(
-                event_id=str(uuid.uuid4()),
-                tenant_id=self.tenant_id,
-                source="entra_id",
-                event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(UTC),
-                raw_data={"object_type": "user", "record": user},
-            ))
+            events.append(
+                RawEvent(
+                    event_id=str(uuid.uuid4()),
+                    tenant_id=self.tenant_id,
+                    source="entra_id",
+                    event_type=EventType.NODE_CREATED,
+                    timestamp=datetime.now(UTC),
+                    raw_data={"object_type": "user", "record": user},
+                )
+            )
         sps = await self._get_all_pages(
             f"{GRAPH_BASE}/servicePrincipals?$select=id,displayName,"
             f"appId,accountEnabled,passwordCredentials"
         )
         for sp in sps:
-            events.append(RawEvent(
-                event_id=str(uuid.uuid4()),
-                tenant_id=self.tenant_id,
-                source="entra_id",
-                event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(UTC),
-                raw_data={"object_type": "service_principal", "record": sp},
-            ))
+            events.append(
+                RawEvent(
+                    event_id=str(uuid.uuid4()),
+                    tenant_id=self.tenant_id,
+                    source="entra_id",
+                    event_type=EventType.NODE_CREATED,
+                    timestamp=datetime.now(UTC),
+                    raw_data={"object_type": "service_principal", "record": sp},
+                )
+            )
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:

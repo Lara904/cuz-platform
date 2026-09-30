@@ -55,11 +55,7 @@ class ServiceNowConnector(IConnector):
 
     async def _get_token(self) -> str:
         """Retourne un access_token valide, en réutilisant le cache si possible."""
-        if (
-            self._token
-            and self._token_expiry
-            and datetime.now(UTC) < self._token_expiry
-        ):
+        if self._token and self._token_expiry and datetime.now(UTC) < self._token_expiry:
             return self._token
 
         url = f"{self.instance_url}/oauth_token.do"
@@ -80,9 +76,7 @@ class ServiceNowConnector(IConnector):
         self._token = resp["access_token"]
         expires_in = resp.get("expires_in", 1800)  # ServiceNow : 1800s par défaut
         # marge de sécurité de 60s pour éviter d'utiliser un token qui expire
-        self._token_expiry = datetime.now(UTC) + timedelta(
-            seconds=expires_in - 60
-        )
+        self._token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
         return self._token
 
     async def _auth_headers(self) -> dict:

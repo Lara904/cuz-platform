@@ -41,6 +41,6 @@ class NormalizedEvent(BaseModel):
     source: str
     event_type: EventType
     timestamp: datetime
-    node: CuzNode | None = None   # inchangé
-    edge: CuzEdge | None = None   # NOUVEAU (V3)
+    node: CuzNode | None = None  # inchangé
+    edge: CuzEdge | None = None  # NOUVEAU (V3)
     schema_version: str = "1.0"

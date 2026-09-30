@@ -17,9 +17,11 @@ def connector():
         org="acmecorp",
     )
 
+
 @pytest.mark.asyncio
 async def test_connection(connector):
     assert await connector.test_connection() is True
+
 
 @pytest.mark.asyncio
 async def test_pull_full_returns_4_repos(connector):
@@ -27,17 +29,17 @@ async def test_pull_full_returns_4_repos(connector):
     repos = [e for e in events if e.raw_data.get("object_type") == "repository"]
     assert len(repos) == 4, f"Attendu 4 repos, obtenu {len(repos)}"
 
+
 @pytest.mark.asyncio
 async def test_backend_repo_has_qs_dependency(connector):
     events = await connector.pull_full()
-    backend = next(
-        (e for e in events if e.raw_data.get("name") == "backend"), None
-    )
+    backend = next((e for e in events if e.raw_data.get("name") == "backend"), None)
     assert backend is not None, "Repo 'backend' non trouvé"
     deps = backend.raw_data.get("dependencies", [])
     qs_dep = next((d for d in deps if d["name"] == "qs"), None)
     assert qs_dep is not None, "Dépendance qs non trouvée dans backend"
     assert qs_dep["version"] == "6.5.2"
+
 
 def test_mapper_dependency_node_type():
     mapper = GiteaMapper("acmecorp")
@@ -47,12 +49,19 @@ def test_mapper_dependency_node_type():
     assert node.attributes["package_name"] == "qs"
     assert node.attributes["version"] == "6.5.2"
 
+
 def test_mapper_edge_type():
     mapper = GiteaMapper("acmecorp")
-    repo = mapper.map_repo({"repo_id": "1", "name": "backend",
-                            "full_name": "acmecorp/backend",
-                            "private": True, "default_branch": "main",
-                            "owner": "acmecorp"})
+    repo = mapper.map_repo(
+        {
+            "repo_id": "1",
+            "name": "backend",
+            "full_name": "acmecorp/backend",
+            "private": True,
+            "default_branch": "main",
+            "owner": "acmecorp",
+        }
+    )
     dep = mapper.map_dependency({"name": "qs", "version": "6.5.2", "ecosystem": "npm"})
     edge = mapper.map_repo_dependency_edge(repo, dep)
     assert edge.edge_type == EdgeType.DEPENDS_ON

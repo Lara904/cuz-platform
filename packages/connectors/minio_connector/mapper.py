@@ -13,8 +13,7 @@ class MinIOMapper:
     def map_bucket(self, raw: dict) -> CuzNode:
         last_seen = datetime.now(UTC)
         contains_pii = any(
-            obj.get("tags", {}).get("contains_pii") == "true"
-            for obj in raw.get("objects", [])
+            obj.get("tags", {}).get("contains_pii") == "true" for obj in raw.get("objects", [])
         )
         return CuzNode(
             tenant_id=self.tenant_id,
@@ -27,10 +26,10 @@ class MinIOMapper:
             sources=["minio"],
             last_seen=last_seen,
             attributes={
-                "is_public":    raw.get("is_public", False),
+                "is_public": raw.get("is_public", False),
                 "contains_pii": contains_pii,
                 "object_count": len(raw.get("objects", [])),
-                "endpoint":     raw.get("endpoint"),
+                "endpoint": raw.get("endpoint"),
                 "creation_date": raw.get("creation_date"),
             },
             tags={

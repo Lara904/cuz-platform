@@ -13,11 +13,11 @@ from packages.core.models.events import EventType, RawEvent
 
 
 class MinIOConnector(IConnector):
-    def __init__(self, tenant_id: str, endpoint: str,
-                 access_key: str, secret_key: str, secure: bool = False):
+    def __init__(
+        self, tenant_id: str, endpoint: str, access_key: str, secret_key: str, secure: bool = False
+    ):
         self.tenant_id = tenant_id
-        self.client = Minio(endpoint, access_key=access_key,
-                            secret_key=secret_key, secure=secure)
+        self.client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
         self.mapper = MinIOMapper(tenant_id)
         self.endpoint = endpoint
 
@@ -45,7 +45,6 @@ class MinIOConnector(IConnector):
         except Exception:
             return False
 
-
     def _get_bucket_tags(self, bucket_name: str) -> dict:
         try:
             tags = self.client.get_bucket_tags(bucket_name)
@@ -63,13 +62,16 @@ class MinIOConnector(IConnector):
                     obj_tags = dict(t) if t else {}
                 except Exception:
                     pass
-                objects.append({
-                    "name": obj.object_name,
-                    "size": obj.size,
-                    "last_modified": obj.last_modified.isoformat()
-                        if obj.last_modified else None,
-                    "tags": obj_tags,
-                })
+                objects.append(
+                    {
+                        "name": obj.object_name,
+                        "size": obj.size,
+                        "last_modified": obj.last_modified.isoformat()
+                        if obj.last_modified
+                        else None,
+                        "tags": obj_tags,
+                    }
+                )
         except Exception:
             pass
         return objects
@@ -83,21 +85,22 @@ class MinIOConnector(IConnector):
             objects = self._list_objects_with_tags(bucket.name)
             raw = {
                 "bucket_name": bucket.name,
-                "creation_date": bucket.creation_date.isoformat()
-                    if bucket.creation_date else None,
+                "creation_date": bucket.creation_date.isoformat() if bucket.creation_date else None,
                 "is_public": is_public,
                 "tags": bucket_tags,
                 "objects": objects,
                 "endpoint": self.endpoint,
             }
-            events.append(RawEvent(
-                event_id=str(uuid.uuid4()),
-                tenant_id=self.tenant_id,
-                source="minio",
-                event_type=EventType.NODE_CREATED,
-                timestamp=datetime.now(UTC),
-                raw_data=raw,
-            ))
+            events.append(
+                RawEvent(
+                    event_id=str(uuid.uuid4()),
+                    tenant_id=self.tenant_id,
+                    source="minio",
+                    event_type=EventType.NODE_CREATED,
+                    timestamp=datetime.now(UTC),
+                    raw_data=raw,
+                )
+            )
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:

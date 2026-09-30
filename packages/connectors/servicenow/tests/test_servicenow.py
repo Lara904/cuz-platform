@@ -84,12 +84,18 @@ def test_mapper_rel_ci_returns_none():
     node = mapper.map_ci("cmdb_rel_ci", rec)
     assert node is None  # cmdb_rel_ci → arête, pas nœud
 
+
 def test_mapper_third_party_vendor():
     mapper = ServiceNowMapper(TENANT)
-    rec = {"sys_id": "tp001", "name": "Acme-Payment-SaaS",
-           "u_vendor_type": "third_party", "exit_plan_status": None}
+    rec = {
+        "sys_id": "tp001",
+        "name": "Acme-Payment-SaaS",
+        "u_vendor_type": "third_party",
+        "exit_plan_status": None,
+    }
     node = mapper.map_ci("cmdb_ci_service", rec)
     assert node.node_type == NodeType.THIRD_PARTY
+
 
 def test_mapper_service_without_vendor_type_stays_application():
     mapper = ServiceNowMapper(TENANT)
@@ -97,13 +103,18 @@ def test_mapper_service_without_vendor_type_stays_application():
     node = mapper.map_ci("cmdb_ci_service", rec)
     assert node.node_type == NodeType.APPLICATION
 
+
 @pytest.mark.asyncio
 async def test_pull_covers_all_6_tables(connector):
     events = await connector.pull_full()
     tables = {e.raw_data["table"] for e in events}
     expected = {
-        "cmdb_ci_server", "cmdb_ci_appl", "cmdb_ci_database",
-        "cmdb_ci_ip_network", "cmdb_ci_service", "cmdb_rel_ci"
+        "cmdb_ci_server",
+        "cmdb_ci_appl",
+        "cmdb_ci_database",
+        "cmdb_ci_ip_network",
+        "cmdb_ci_service",
+        "cmdb_rel_ci",
     }
     # Les tables vides ne génèrent pas d'événements — on vérifie
     # que le connecteur a bien TENTÉ de les interroger, pas qu'elles

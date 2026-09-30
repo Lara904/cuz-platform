@@ -6,13 +6,14 @@ from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
 
 TABLE_TO_NODE_TYPE = {
-    "cmdb_ci_server":     NodeType.SERVER,
-    "cmdb_ci_appl":       NodeType.APPLICATION,
-    "cmdb_ci_database":   NodeType.DATABASE,
+    "cmdb_ci_server": NodeType.SERVER,
+    "cmdb_ci_appl": NodeType.APPLICATION,
+    "cmdb_ci_database": NodeType.DATABASE,
     "cmdb_ci_ip_network": NodeType.NETWORK,
-    "cmdb_ci_service":    NodeType.APPLICATION,
-    "cmdb_rel_ci":        None,  # arête — traité séparément
+    "cmdb_ci_service": NodeType.APPLICATION,
+    "cmdb_rel_ci": None,  # arête — traité séparément
 }
+
 
 class ServiceNowMapper:
     def __init__(self, tenant_id: str):
@@ -42,17 +43,17 @@ class ServiceNowMapper:
             last_seen=last_seen,
             attributes={
                 "operational_status": rec.get("operational_status"),
-                "environment":        rec.get("environment"),
-                "sys_class_name":     rec.get("sys_class_name"),
-                "ip_address":         rec.get("ip_address"),
-                "os":                 rec.get("os"),
-                "exit_plan_status":   rec.get("exit_plan_status"),
-                "vendor":             rec.get("vendor"),
-                "support_group":      rec.get("support_group"),
-                "u_vendor_type":      rec.get("u_vendor_type"),
+                "environment": rec.get("environment"),
+                "sys_class_name": rec.get("sys_class_name"),
+                "ip_address": rec.get("ip_address"),
+                "os": rec.get("os"),
+                "exit_plan_status": rec.get("exit_plan_status"),
+                "vendor": rec.get("vendor"),
+                "support_group": rec.get("support_group"),
+                "u_vendor_type": rec.get("u_vendor_type"),
             },
             tags={
-                "source":      "servicenow",
-                "cmdb_table":  table,
+                "source": "servicenow",
+                "cmdb_table": table,
             },
         )

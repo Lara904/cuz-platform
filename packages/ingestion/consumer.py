@@ -9,6 +9,7 @@ from packages.ingestion.normalizer import Normalizer
 logger = logging.getLogger(__name__)
 SEEN_EVENT_IDS: set = set()  # en mémoire — Redis en prod
 
+
 class PipelineConsumer:
     def __init__(
         self,
@@ -18,12 +19,14 @@ class PipelineConsumer:
     ):
         self.normalizer = Normalizer()
         self.max_retries = max_retries
-        self.consumer = Consumer({
-            "bootstrap.servers": bootstrap_servers,
-            "group.id": group_id,
-            "auto.offset.reset": "earliest",
-            "enable.auto.commit": False,
-        })
+        self.consumer = Consumer(
+            {
+                "bootstrap.servers": bootstrap_servers,
+                "group.id": group_id,
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": False,
+            }
+        )
         self.dlq_producer = Producer({"bootstrap.servers": bootstrap_servers})
 
     def _get_dlq_topic(self, tenant_id: str) -> str:
@@ -31,8 +34,7 @@ class PipelineConsumer:
 
     def _to_dlq(self, tenant_id: str, raw_bytes: bytes, reason: str) -> None:
         topic = self._get_dlq_topic(tenant_id)
-        self.dlq_producer.produce(topic, value=raw_bytes,
-                                   headers=[("reason", reason.encode())])
+        self.dlq_producer.produce(topic, value=raw_bytes, headers=[("reason", reason.encode())])
         self.dlq_producer.poll(0)
 
     def run(self, tenant_id: str, on_normalized=None) -> None:

@@ -24,10 +24,10 @@ class GiteaMapper:
             sources=["gitea"],
             last_seen=last_seen,
             attributes={
-                "full_name":      raw.get("full_name"),
-                "private":        raw.get("private", True),
+                "full_name": raw.get("full_name"),
+                "private": raw.get("private", True),
                 "default_branch": raw.get("default_branch", "main"),
-                "owner":          raw.get("owner"),
+                "owner": raw.get("owner"),
             },
             tags={"source": "gitea"},
         )
@@ -47,15 +47,13 @@ class GiteaMapper:
             last_seen=last_seen,
             attributes={
                 "package_name": dep["name"],
-                "version":      dep["version"],
-                "ecosystem":    dep.get("ecosystem", "unknown"),
+                "version": dep["version"],
+                "ecosystem": dep.get("ecosystem", "unknown"),
             },
             tags={"source": "gitea", "node_subtype": "dependency"},
         )
 
-    def map_repo_dependency_edge(
-        self, repo_node: CuzNode, dep_node: CuzNode
-    ) -> CuzEdge:
+    def map_repo_dependency_edge(self, repo_node: CuzNode, dep_node: CuzNode) -> CuzEdge:
         last_seen = datetime.now(UTC)
         return CuzEdge(
             tenant_id=self.tenant_id,

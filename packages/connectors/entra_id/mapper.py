@@ -23,12 +23,11 @@ class EntraIDMapper:
             sources=["entra_id"],
             last_seen=last_seen,
             attributes={
-                "upn":             rec.get("userPrincipalName"),
+                "upn": rec.get("userPrincipalName"),
                 "account_enabled": rec.get("accountEnabled"),
-                "has_mfa":         rec.get("has_mfa", False),
-                "mfa_methods":     [m.get("@odata.type")
-                                    for m in rec.get("mfa_methods", [])],
-                "created_at":      rec.get("createdDateTime"),
+                "has_mfa": rec.get("has_mfa", False),
+                "mfa_methods": [m.get("@odata.type") for m in rec.get("mfa_methods", [])],
+                "created_at": rec.get("createdDateTime"),
             },
             tags={"source": "entra_id", "object_type": "user"},
         )
@@ -37,9 +36,7 @@ class EntraIDMapper:
         last_seen = datetime.now(UTC)
         creds = rec.get("passwordCredentials", [])
         expired = any(
-            c.get("endDateTime") and
-            c["endDateTime"] < datetime.now(UTC).isoformat()
-            for c in creds
+            c.get("endDateTime") and c["endDateTime"] < datetime.now(UTC).isoformat() for c in creds
         )
         return CuzNode(
             tenant_id=self.tenant_id,
@@ -52,7 +49,7 @@ class EntraIDMapper:
             sources=["entra_id"],
             last_seen=last_seen,
             attributes={
-                "app_id":          rec.get("appId"),
+                "app_id": rec.get("appId"),
                 "account_enabled": rec.get("accountEnabled"),
                 "has_expired_creds": expired,
             },
