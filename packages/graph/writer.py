@@ -1,7 +1,7 @@
-import os
 # packages/graph/writer.py
 import json
 import logging
+import os
 
 from confluent_kafka import Consumer, Producer
 
@@ -99,6 +99,10 @@ class GraphWriter:
             "group.id": "cuz-graph-writer",
             "auto.offset.reset": "earliest",
             "enable.auto.commit": False,
+            # Membership statique : un redémarrage reprend la place sans rebalancing
+            # et sans membre fantôme. Une seule réplica par design.
+            "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID", "cuz-graph-writer-0"),
+            "session.timeout.ms": 10000,
         })
         self.producer = Producer({"bootstrap.servers": bootstrap_servers})
 
@@ -204,9 +208,37 @@ class GraphWriter:
         )
         self.producer.poll(0)
 
+    def process_event(self, session, raw_value: bytes) -> None:
+        """Traite un NormalizedEvent. Lève une exception en cas d'échec."""
+        event = NormalizedEvent.model_validate_json(raw_value.decode())
+        if event.node:
+            if event.node.confidence_score < CONFIDENCE_THRESHOLD:
+                self._quarantine(event)
+            else:
+                self._upsert_node(session, event)
+                self._publish_mutation(event)
+        if event.edge:
+            self._upsert_edge(session, event.edge)
+            self._publish_mutation(event)
+
+    def _dlq(self, tenant_id: str, raw_value: bytes, reason: str) -> bool:
+        """Envoie le message en DLQ et attend la confirmation du broker.
+        Retourne False si la confirmation n'arrive pas : l'offset ne doit alors PAS être validé."""
+        errors: list = []
+        self.producer.produce(
+            topic=f"cuz.graph.mutations.{tenant_id}.dlq",
+            value=raw_value,
+            headers=[("reason", reason.encode()[:200])],
+            on_delivery=lambda err, _msg: errors.append(err) if err else None,
+        )
+        return self.producer.flush(timeout=10) == 0 and not errors
+
     def run(self, tenant_id: str, idle_timeout: float | None = None) -> None:
         """Consomme cuz.normalized. Si idle_timeout (s) est fourni, s'arrête
-        après autant de secondes sans message (scan ponctuel)."""
+        après autant de secondes sans message (scan ponctuel).
+
+        Un message en échec part en DLQ ; l'offset n'est validé qu'une fois la DLQ confirmée.
+        Sans confirmation, on ne valide rien : le message sera relu au redémarrage."""
         self.consumer.subscribe([f"cuz.normalized.{tenant_id}"])
         with self.driver.session() as session:
             idle = 0.0
@@ -222,18 +254,11 @@ class GraphWriter:
                     if msg.error():
                         continue
                     try:
-                        event = NormalizedEvent.model_validate_json(msg.value().decode())
-                        if event.node:
-                            if event.node.confidence_score < CONFIDENCE_THRESHOLD:
-                                self._quarantine(event)
-                            else:
-                                self._upsert_node(session, event)
-                                self._publish_mutation(event)
-                        if event.edge:                       # NOUVEAU (V3)
-                            self._upsert_edge(session, event.edge)
-                            self._publish_mutation(event)
+                        self.process_event(session, msg.value())
                     except Exception as e:
                         logger.error("GraphWriter error: %s", e)
+                        if not self._dlq(tenant_id, msg.value(), f"write_error:{e}"):
+                            raise RuntimeError("DLQ non confirmée : arrêt sans validation d'offset") from e
                     self.consumer.commit(message=msg)
                 self.reconcile_owns(session)
             finally:

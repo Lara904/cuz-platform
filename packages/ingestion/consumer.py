@@ -1,6 +1,6 @@
-import os
 # packages/ingestion/consumer.py
 import logging
+import os
 
 from confluent_kafka import Consumer, KafkaError, Producer
 
@@ -26,6 +26,8 @@ class PipelineConsumer:
                 "group.id": group_id,
                 "auto.offset.reset": "earliest",
                 "enable.auto.commit": False,
+                "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID", "cuz-ingestion-0"),
+                "session.timeout.ms": 10000,
             }
         )
         self.dlq_producer = Producer({"bootstrap.servers": bootstrap_servers})
