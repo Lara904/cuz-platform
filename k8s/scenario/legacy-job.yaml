@@ -1,0 +1,33 @@
+# Pod du scénario ATTACK-PATH-001 (namespace production, hors cuz-acmecorp).
+# Image acmecorp/backend:latest : image de substitution construite depuis ubuntu:20.04
+# (pas le vrai backend). Privileged conservé : c'est le maillon vulnérable du scénario.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: legacy-job
+  namespace: production
+  labels:
+    app: legacy-job
+spec:
+  containers:
+  - name: legacy
+    image: acmecorp/backend:latest
+    imagePullPolicy: IfNotPresent
+    command: ["sleep", "3600"]
+    securityContext:
+      privileged: true
+      runAsUser: 0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-job
+  namespace: production
+spec:
+  type: NodePort
+  selector:
+    app: legacy-job
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080

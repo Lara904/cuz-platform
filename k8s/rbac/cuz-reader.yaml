@@ -1,0 +1,29 @@
+# Lecture seule sur le cluster pour le connecteur Kubernetes (P2.1). RÈGLE 1 : aucune écriture.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cuz-reader
+  namespace: cuz-acmecorp
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cuz-reader
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "pods", "services", "nodes"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cuz-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cuz-reader
+subjects:
+- kind: ServiceAccount
+  name: cuz-reader
+  namespace: cuz-acmecorp

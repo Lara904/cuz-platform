@@ -49,7 +49,9 @@ class PipelineConsumer:
         """Sortie par défaut : le GraphWriter consomme cuz.normalized.{tenant_id}."""
         self.normalized_producer.produce(
             topic=self._get_normalized_topic(tenant_id),
-            key=event.event_id.encode(),
+            # Clé = raw_event_id : tous les événements d'un même RawEvent vont dans la même
+            # partition, dans l'ordre (nœuds avant arêtes).
+            key=event.raw_event_id.encode(),
             value=event.model_dump_json().encode(),
         )
         self.normalized_producer.poll(0)

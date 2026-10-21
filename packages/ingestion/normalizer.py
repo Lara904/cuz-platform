@@ -3,6 +3,7 @@ import uuid
 
 from packages.connectors.entra_id.mapper import EntraIDMapper
 from packages.connectors.gitea.mapper import GiteaMapper
+from packages.connectors.kubernetes.mapper import KubernetesMapper
 from packages.connectors.minio_connector.mapper import MinIOMapper
 from packages.connectors.servicenow.mapper import ServiceNowMapper
 from packages.connectors.terraform.mapper import TerraformMapper
@@ -27,6 +28,8 @@ class Normalizer:
                 self._mappers[key] = GiteaMapper(tenant_id)
             elif source == "terraform":
                 self._mappers[key] = TerraformMapper(tenant_id)
+            elif source == "kubernetes":
+                self._mappers[key] = KubernetesMapper(tenant_id)
         return self._mappers.get(key)
 
     @staticmethod
@@ -65,6 +68,41 @@ class Normalizer:
             elif obj_type == "service_principal":
                 node = self._stamp(mapper.map_service_principal(raw.raw_data["record"]))
                 results.append(self._wrap(raw, node=node))
+
+        elif raw.source == "kubernetes":
+            # Un pod part avec son namespace et son cluster, et leurs arêtes : tout dans
+            # le même message, donc même partition et ordre préservé (cf. clé de publication).
+            obj = raw.raw_data.get("object_type")
+            if obj == "node":
+                results.append(self._wrap(raw, node=self._stamp(mapper.map_node(raw.raw_data))))
+            elif obj == "cluster":
+                results.append(self._wrap(raw, node=self._stamp(mapper.map_cluster(raw.raw_data))))
+            elif obj == "namespace":
+                cluster = self._stamp(mapper.map_cluster({"name": raw.raw_data["cluster_name"]}))
+                namespace = self._stamp(mapper.map_namespace(raw.raw_data))
+                results.append(self._wrap(raw, node=cluster))
+                results.append(self._wrap(raw, node=namespace))
+                results.append(self._wrap(raw, edge=mapper.map_member_of_edge(namespace, cluster)))
+            elif obj == "pod":
+                data = raw.raw_data
+                cluster = self._stamp(mapper.map_cluster({"name": data["cluster_name"]}))
+                namespace = self._stamp(mapper.map_namespace({
+                    "name": data["namespace"], "uid": data["namespace_uid"],
+                    "cluster_name": data["cluster_name"]}))
+                pod = self._stamp(mapper.map_pod(data))
+                nodes = [cluster, namespace, pod]
+                # Le SERVER du node_name est ré-émis avec le pod : pas de dépendance d'ordre
+                if data.get("node_name"):
+                    server = self._stamp(mapper.map_node({"name": data["node_name"],
+                                                          "cluster_name": data["cluster_name"]}))
+                    nodes.append(server)
+                for node in nodes:
+                    results.append(self._wrap(raw, node=node))
+                results.append(self._wrap(raw, edge=mapper.map_member_of_edge(pod, namespace)))
+                results.append(self._wrap(raw, edge=mapper.map_member_of_edge(namespace, cluster)))
+                results.append(self._wrap(raw, edge=mapper.map_runs_on_edge(pod, cluster)))
+                if data.get("node_name"):
+                    results.append(self._wrap(raw, edge=mapper.map_runs_on_edge(pod, server)))
 
         elif raw.source == "terraform":
             node = self._stamp(mapper.map_resource(raw.raw_data["resource"]))

@@ -59,4 +59,11 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
         connectors["terraform"] = TerraformConnector(tenant_id=tenant_id, config={})
     except Exception as e:
         logger.warning("Terraform ignoré : %s", e)
+    kubeconfig = os.getenv("KUBECONFIG_PATH")
+    if kubeconfig:
+        try:
+            from packages.connectors.kubernetes.connector import KubernetesConnector
+            connectors["kubernetes"] = KubernetesConnector(tenant_id, kubeconfig_path=kubeconfig)
+        except Exception as e:
+            logger.warning("Kubernetes ignoré : %s", e)
     return connectors
