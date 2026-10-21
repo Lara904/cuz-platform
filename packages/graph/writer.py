@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import socket
 
 from confluent_kafka import Consumer, Producer
 
@@ -101,7 +102,7 @@ class GraphWriter:
             "enable.auto.commit": False,
             # Membership statique : un redémarrage reprend la place sans rebalancing
             # et sans membre fantôme. Une seule réplica par design.
-            "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID", "cuz-graph-writer-0"),
+            "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID") or f"cuz-graph-writer-{socket.gethostname()}-{os.getpid()}",
             "session.timeout.ms": 10000,
         })
         self.producer = Producer({"bootstrap.servers": bootstrap_servers})

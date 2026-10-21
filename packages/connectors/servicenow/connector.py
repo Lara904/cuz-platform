@@ -68,8 +68,14 @@ class ServiceNowConnector(IConnector):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
+        # Retry borné sur les erreurs 5xx transitoires (PDI instable) ; les 4xx restent des échecs
         async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(url, data=data, headers=headers)
+            # PDI : OAuth ~50 % de 500 observés → 6 tentatives (échec complet ≈ 1,6 %)
+            for attempt in range(1, 7):
+                r = await client.post(url, data=data, headers=headers)
+                if r.status_code < 500 or attempt == 6:
+                    break
+                await asyncio.sleep(3 * attempt)
             r.raise_for_status()
             resp = r.json()
 
@@ -93,6 +99,15 @@ class ServiceNowConnector(IConnector):
             r = await client.get(url, params=params, headers=headers)
             return r.status_code == 200
 
+    async def _get_with_retry(self, client, url, params, headers):
+        """GET avec retry borné sur 5xx (PDI instable). Les 4xx ne sont pas retentés."""
+        for attempt in range(1, 7):
+            r = await client.get(url, params=params, headers=headers)
+            if r.status_code < 500 or attempt == 6:
+                return r
+            await asyncio.sleep(3 * attempt)
+        return r
+
     async def _fetch_table(
         self,
         client: httpx.AsyncClient,
@@ -114,7 +129,7 @@ class ServiceNowConnector(IConnector):
             # header rafraîchi à chaque page : couvre un scan long qui dépasse
             # la durée de vie du token
             headers = await self._auth_headers()
-            r = await client.get(url, params=params, headers=headers)
+            r = await self._get_with_retry(client, url, params, headers)
             r.raise_for_status()
             batch = r.json().get("result", [])
             results.extend(batch)

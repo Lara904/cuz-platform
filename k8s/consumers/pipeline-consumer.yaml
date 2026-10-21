@@ -40,6 +40,8 @@ spec:
         env:
         - name: PYTHONDONTWRITEBYTECODE
           value: "1"
+        - name: CONSUMER_INSTANCE_ID   # identité statique stable (un seul membre dans le groupe)
+          value: pipeline-consumer-0
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
