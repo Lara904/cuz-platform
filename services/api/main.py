@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from services.api.middleware.logging import LoggingMiddleware
 from services.api.middleware.rate_limit import RateLimitMiddleware
-from services.api.routers import auth, connectors, health, tenants
+from services.api.routers import auth, connectors, coverage, dashboard, exports, findings, graph, health, tenants
 from services.api.routers.tenants import init_db as init_tenants_db
 from services.api.routers.connectors import init_db as init_connectors_db
+from services.api.audit import init_audit_db
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     print("CUz API démarrage...")
     await init_tenants_db()
     await init_connectors_db()
+    await init_audit_db()
     yield
     # Shutdown
     print("CUz API arrêt.")
@@ -51,6 +53,11 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(tenants.router)
 app.include_router(connectors.router)
+app.include_router(findings.router)
+app.include_router(dashboard.router)
+app.include_router(graph.router)
+app.include_router(exports.router)
+app.include_router(coverage.router)
 
 
 @app.get("/", tags=["root"])

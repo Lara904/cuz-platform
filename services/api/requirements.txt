@@ -22,3 +22,6 @@ pydantic-settings==2.5.2
 
 # HTTP client (pour tests d'intégration)
 httpx==0.27.2
+# Graphe Neo4j et détection (importés par les routers dashboard, graph, findings)
+neo4j>=5.0
+python-dotenv>=1.0

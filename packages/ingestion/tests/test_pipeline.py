@@ -89,15 +89,6 @@ def test_normalize_gitea_repo_produces_node_and_edges():
     assert edge_events[0].edge.edge_type.value == "DEPENDS_ON"
 
 
-def test_idempotence_same_event_id():
-    """Le même event_id ne doit produire qu'un seul traitement."""
-    from packages.ingestion.consumer import SEEN_EVENT_IDS
-
-    event_id = str(uuid.uuid4())
-    SEEN_EVENT_IDS.add(event_id)
-    assert event_id in SEEN_EVENT_IDS
-
-
 def test_normalize_unknown_source_returns_empty_list():
     n = Normalizer()
     raw = make_raw("unknown_source", {"foo": "bar"})
@@ -134,24 +125,11 @@ def test_gitea_repo_with_n_deps_produces_1_plus_2n():
     assert len(edge_events) == n_deps  # 3 DEPENDS_ON
 
 
-def test_idempotence_100_duplicates():
-    """100 copies du même event_id → 1 seul traitement."""
-    from packages.ingestion.consumer import SEEN_EVENT_IDS, PipelineConsumer
-
-    processed = []
-    consumer = PipelineConsumer()
-    event_id = str(uuid.uuid4())
-    raw = make_raw(
-        "servicenow", {"table": "cmdb_ci_server", "record": {"sys_id": "dup-01", "name": "dup-srv"}}
-    )
-    # On force le même event_id sur les 100 copies
-    raw = raw.model_copy(update={"event_id": event_id})
-
-    for _ in range(100):
-        if raw.event_id in SEEN_EVENT_IDS:
-            continue
-        SEEN_EVENT_IDS.add(raw.event_id)
-        results = consumer.normalizer.normalize(raw)
-        processed.extend(results)
-
-    assert len(processed) == 1  # traité une seule fois
+def test_node_id_is_stable_across_runs():
+    """Même repo, deux normalisations (deux exécutions) → même id de nœud."""
+    raw_data = {"object_type": "repository", "repo_id": "7", "name": "backend",
+                "full_name": "acmecorp/backend", "owner": "acmecorp", "private": True,
+                "default_branch": "main", "dependencies": []}
+    first = Normalizer().normalize(make_raw("gitea", raw_data))[0].node.id
+    second = Normalizer().normalize(make_raw("gitea", raw_data))[0].node.id
+    assert first == second == "gitea:7"

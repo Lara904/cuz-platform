@@ -25,8 +25,8 @@ class ServiceNowMapper:
             return None
 
         # FIX-1 : distinguer un prestataire tiers d'une application interne
-        # sur cmdb_ci_service, selon l'attribut u_vendor_type du CI ServiceNow.
-        if table == "cmdb_ci_service" and rec.get("u_vendor_type") == "third_party":
+        # (toute table mappée en APPLICATION), selon u_vendor_type du CI.
+        if node_type == NodeType.APPLICATION and rec.get("u_vendor_type") == "third_party":
             node_type = NodeType.THIRD_PARTY
 
         name = rec.get("name") or rec.get("sys_id", "unknown")
@@ -47,7 +47,7 @@ class ServiceNowMapper:
                 "sys_class_name": rec.get("sys_class_name"),
                 "ip_address": rec.get("ip_address"),
                 "os": rec.get("os"),
-                "exit_plan_status": rec.get("exit_plan_status"),
+                "exit_plan_status": rec.get("u_exit_plan_status", rec.get("exit_plan_status")),  # champ custom ServiceNow : préfixe u_ obligatoire
                 "vendor": rec.get("vendor"),
                 "support_group": rec.get("support_group"),
                 "u_vendor_type": rec.get("u_vendor_type"),

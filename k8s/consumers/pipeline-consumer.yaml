@@ -1,0 +1,61 @@
+# k8s/consumers/pipeline-consumer.yaml
+# Consumer Kafka permanent (Deployment). Conforme PSS restricted.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-consumer
+  namespace: cuz-acmecorp
+  labels:
+    app: cuz-worker
+    component: pipeline-consumer
+spec:
+  replicas: 1          # une seule réplica : état de résolution d'entités en mémoire
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cuz-worker
+      component: pipeline-consumer
+  template:
+    metadata:
+      labels:
+        app: cuz-worker
+        component: pipeline-consumer
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: pipeline-consumer
+        image: cuz-worker:0.1.0
+        imagePullPolicy: IfNotPresent
+        command: ["python", "-m", "packages.ingestion.consumer", "--tenant", "acmecorp"]
+        envFrom:
+        - secretRef:
+            name: cuz-acmecorp-secrets
+        env:
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 768Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi

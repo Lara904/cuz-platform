@@ -5,6 +5,7 @@ from packages.connectors.entra_id.mapper import EntraIDMapper
 from packages.connectors.gitea.mapper import GiteaMapper
 from packages.connectors.minio_connector.mapper import MinIOMapper
 from packages.connectors.servicenow.mapper import ServiceNowMapper
+from packages.connectors.terraform.mapper import TerraformMapper
 from packages.core.models.events import NormalizedEvent, RawEvent
 
 
@@ -24,7 +25,17 @@ class Normalizer:
                 self._mappers[key] = EntraIDMapper(tenant_id)
             elif source == "gitea":
                 self._mappers[key] = GiteaMapper(tenant_id)
+            elif source == "terraform":
+                self._mappers[key] = TerraformMapper(tenant_id)
         return self._mappers.get(key)
+
+    @staticmethod
+    def _stamp(node):
+        """Id stable `{connector}:{external_id}` (CLAUDE.md). Un id aléatoire
+        par exécution casse les MATCH par id des arêtes lors d'un rescan."""
+        if node is not None:
+            node.id = f"{node.sources[0]}:{node.external_id or node.name}"
+        return node
 
     def normalize(self, raw: RawEvent) -> list[NormalizedEvent]:
         """Retourne une LISTE de NormalizedEvent (peut être vide) : un repo
@@ -38,27 +49,32 @@ class Normalizer:
         results: list[NormalizedEvent] = []
 
         if raw.source == "servicenow":
-            node = mapper.map_ci(raw.raw_data["table"], raw.raw_data["record"])
+            node = self._stamp(mapper.map_ci(raw.raw_data["table"], raw.raw_data["record"]))
             if node:
                 results.append(self._wrap(raw, node=node))
 
         elif raw.source == "minio":
-            node = mapper.map_bucket(raw.raw_data)
+            node = self._stamp(mapper.map_bucket(raw.raw_data))
             results.append(self._wrap(raw, node=node))
 
         elif raw.source == "entra_id":
             obj_type = raw.raw_data.get("object_type")
             if obj_type == "user":
-                node = mapper.map_user(raw.raw_data["record"])
+                node = self._stamp(mapper.map_user(raw.raw_data["record"]))
                 results.append(self._wrap(raw, node=node))
             elif obj_type == "service_principal":
-                node = mapper.map_service_principal(raw.raw_data["record"])
+                node = self._stamp(mapper.map_service_principal(raw.raw_data["record"]))
+                results.append(self._wrap(raw, node=node))
+
+        elif raw.source == "terraform":
+            node = self._stamp(mapper.map_resource(raw.raw_data["resource"]))
+            if node:
                 results.append(self._wrap(raw, node=node))
 
         elif raw.source == "gitea":
             obj_type = raw.raw_data.get("object_type")
             if obj_type == "repository":
-                repo_node = mapper.map_repo(raw.raw_data)
+                repo_node = self._stamp(mapper.map_repo(raw.raw_data))
                 results.append(self._wrap(raw, node=repo_node))
                 cache_key = (raw.tenant_id, raw.raw_data["repo_id"])
                 self._repo_node_cache[cache_key] = repo_node
@@ -67,7 +83,7 @@ class Normalizer:
                 # par dépendance, en réutilisant map_repo_dependency_edge()
                 # déjà présent dans GiteaMapper (jusqu'ici jamais appelé).
                 for dep in raw.raw_data.get("dependencies", []):
-                    dep_node = mapper.map_dependency(dep)
+                    dep_node = self._stamp(mapper.map_dependency(dep))
                     results.append(self._wrap(raw, node=dep_node))
                     edge = mapper.map_repo_dependency_edge(repo_node, dep_node)
                     results.append(self._wrap(raw, edge=edge))

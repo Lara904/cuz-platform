@@ -1,0 +1,11 @@
+# Namespace CUz sur le cluster k3d acmecorp. Séparé de "production" (pods applicatifs).
+# PodSecurity "restricted" en enforce : tout pod non conforme est refusé à l'admission.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cuz-acmecorp
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

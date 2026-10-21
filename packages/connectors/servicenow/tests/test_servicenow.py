@@ -1,6 +1,8 @@
 # packages/connectors/servicenow/tests/test_servicenow.py
+import functools
 import os
 
+import httpx
 import pytest
 
 from packages.connectors.servicenow.connector import ServiceNowConnector
@@ -10,6 +12,20 @@ from packages.core.models.enums import NodeType
 TENANT = "acmecorp"
 INSTANCE = "https://dev353984.service-now.com"
 
+
+
+def skip_if_instance_5xx(test):
+    """Tests live : skip UNIQUEMENT si le PDI renvoie une erreur 5xx (instance indisponible).
+    Toute autre erreur reste un échec."""
+    @functools.wraps(test)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await test(*args, **kwargs)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500:
+                pytest.skip(f"instance ServiceNow indisponible ({e.response.status_code})")
+            raise
+    return wrapper
 
 @pytest.fixture
 def connector():
@@ -27,6 +43,7 @@ def connector():
 
 
 @pytest.mark.asyncio
+@skip_if_instance_5xx
 async def test_connection_returns_true(connector):
     """test_connection() doit retourner True sur le PDI réel via OAuth."""
     result = await connector.test_connection()
@@ -34,6 +51,7 @@ async def test_connection_returns_true(connector):
 
 
 @pytest.mark.asyncio
+@skip_if_instance_5xx
 async def test_oauth_token_is_cached(connector):
     """Le second appel réutilise le token en cache (pas de nouvel appel OAuth)."""
     token_1 = await connector._get_token()
@@ -43,6 +61,7 @@ async def test_oauth_token_is_cached(connector):
 
 
 @pytest.mark.asyncio
+@skip_if_instance_5xx
 async def test_pull_full_returns_events(connector):
     events = await connector.pull_full()
     assert len(events) > 20, f"Attendu >20 événements, obtenu {len(events)}"
@@ -97,6 +116,13 @@ def test_mapper_third_party_vendor():
     assert node.node_type == NodeType.THIRD_PARTY
 
 
+def test_mapper_appl_third_party_vendor():
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "tp002", "name": "Vendor-App", "u_vendor_type": "third_party"}
+    node = mapper.map_ci("cmdb_ci_appl", rec)
+    assert node.node_type == NodeType.THIRD_PARTY
+
+
 def test_mapper_service_without_vendor_type_stays_application():
     mapper = ServiceNowMapper(TENANT)
     rec = {"sys_id": "svc001", "name": "internal-billing"}
@@ -105,6 +131,7 @@ def test_mapper_service_without_vendor_type_stays_application():
 
 
 @pytest.mark.asyncio
+@skip_if_instance_5xx
 async def test_pull_covers_all_6_tables(connector):
     events = await connector.pull_full()
     tables = {e.raw_data["table"] for e in events}

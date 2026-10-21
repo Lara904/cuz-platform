@@ -29,10 +29,11 @@ services:
       - --smp 1
       - --memory 512M
       - --overprovisioned
-      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
-      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092,CLUSTER://0.0.0.0:19092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092,CLUSTER://172.19.0.1:19092  # passerelle du réseau k3d-acmecorp (pods k3d)
     ports:
       - "9092:9092"
+      - "19092:19092"   # listener CLUSTER pour les pods k3d
       - "8080:8080"   # Redpanda Console
     healthcheck:
       test: ['CMD', 'rpk', 'cluster', 'health']

@@ -9,6 +9,9 @@ DEFAULT_SOURCE_WEIGHTS: dict[str, float] = {
     "kubernetes": 0.92,  # API K8s
     "sentinel": 0.85,  # Alertes sécurité
     "terraform": 0.88,  # IaC
+    "minio":      0.85,   # ← AJOUTER
+    "gitea":      0.88,   # ← AJOUTER
+    "manual":     0.80,   # saisie humaine (ex: BIA, processus métier) — comparable à la CMDB
 }
 
 

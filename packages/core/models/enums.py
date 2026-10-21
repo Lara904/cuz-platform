@@ -32,6 +32,9 @@ class NodeType(StrEnum):
     THIRD_PARTY = "THIRD_PARTY"
     # Contract legacy
     CONTRACT = "CONTRACT"
+    # P1.16 : réconciliation métier↔IT
+    BUSINESS_PROCESS = "BUSINESS_PROCESS"
+    BUSINESS_FUNCTION = "BUSINESS_FUNCTION"
 
 
 class EdgeType(StrEnum):
@@ -57,3 +60,4 @@ class EdgeType(StrEnum):
     PART_OF = "PART_OF"
     GOVERNED_BY = "GOVERNED_BY"
     COVERS = "COVERS"
+    OWNS = "OWNS" 

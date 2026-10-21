@@ -22,8 +22,8 @@ from packages.core.models.node import CuzNode
 
 
 def test_nodetype_count():
-    """22 types de nœuds définis."""
-    assert len(NodeType) == 22
+    """24 types de nœuds : 22 du P0 + BUSINESS_PROCESS et BUSINESS_FUNCTION (P1.16)."""
+    assert len(NodeType) == 24
 
 
 def test_nodetype_infrastructure_values():
@@ -65,8 +65,8 @@ def test_nodetype_from_string():
 
 
 def test_edgetype_count():
-    """22 types d'arêtes définis."""
-    assert len(EdgeType) == 22
+    """23 types d'arêtes : 22 du P0 + OWNS (P1.6)."""
+    assert len(EdgeType) == 23
 
 
 def test_edgetype_core_values():

@@ -1,0 +1,4 @@
+process_name,criticality,supporting_asset_external_id
+Paiement client,critical,Acme-Payment-SaaS
+Onboarding fournisseur,high,Acme-HR-SaaS
+Facturation interne,medium,billing-api

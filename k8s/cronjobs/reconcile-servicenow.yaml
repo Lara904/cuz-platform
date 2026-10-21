@@ -1,0 +1,64 @@
+# k8s/cronjobs/reconcile-servicenow.yaml
+# Réconciliation ServiceNow (quotidienne). Schedule : 0 2 * * * (UTC). Conforme PSS restricted.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reconcile-servicenow
+  namespace: cuz-acmecorp
+  labels:
+    app: cuz-worker
+    job: reconcile-servicenow
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: cuz-worker
+            job: reconcile-servicenow
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: worker
+            image: cuz-worker:0.1.0
+            imagePullPolicy: IfNotPresent
+            command: ["python", "-m", "packages.ingestion.reconcile", "--source", "servicenow", "--tenant", "acmecorp"]
+            envFrom:
+            - secretRef:
+                name: cuz-acmecorp-secrets
+            env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: tmp
+            emptyDir:
+              sizeLimit: 64Mi

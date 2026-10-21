@@ -19,6 +19,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copier le code source complet
 COPY . .
 
+# Utilisateur non-root (PSS restricted, runAsNonRoot)
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin cuz
+USER 10001
+
 # Port exposé
 EXPOSE 8000
 

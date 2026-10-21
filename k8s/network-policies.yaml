@@ -1,0 +1,105 @@
+# Politique réseau : deny-all par défaut, puis ouvertures explicites.
+# Ports de sortie autorisés : 53 (DNS), 5432 (PostgreSQL), 6379 (Redis), 7687 (Neo4j),
+# 19092/9092 (Redpanda), 8181 (OPA), 443 (Entra ID / ServiceNow / Gitea HTTPS).
+# Limite connue : sans "to", ces ports sont ouverts vers toute destination ;
+# restreindre aux IP des services (hors cluster) une fois ces IP fixées.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cuz-default-deny
+  namespace: cuz-acmecorp
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cuz-allow-dns
+  namespace: cuz-acmecorp
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cuz-api-ingress
+  namespace: cuz-acmecorp
+spec:
+  podSelector:
+    matchLabels:
+      app: cuz-api
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system   # ingress Traefik de k3d
+    ports:
+    - port: 8000
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cuz-api-egress
+  namespace: cuz-acmecorp
+spec:
+  podSelector:
+    matchLabels:
+      app: cuz-api
+  policyTypes: [Egress]
+  egress:
+  - ports:
+    - port: 5432
+      protocol: TCP
+    - port: 6379
+      protocol: TCP
+    - port: 7687
+      protocol: TCP
+    - port: 19092
+      protocol: TCP
+    - port: 9092
+      protocol: TCP
+    - port: 8181
+      protocol: TCP
+    - port: 443
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cuz-worker-egress
+  namespace: cuz-acmecorp
+spec:
+  podSelector:
+    matchLabels:
+      app: cuz-worker
+  policyTypes: [Egress]
+  egress:
+  - ports:
+    - port: 5432
+      protocol: TCP
+    - port: 7687
+      protocol: TCP
+    - port: 19092
+      protocol: TCP
+    - port: 8181
+      protocol: TCP
+    - port: 443
+      protocol: TCP
+    - port: 3000     # Gitea (connecteur)
+      protocol: TCP
+    - port: 9000     # MinIO (connecteur)
+      protocol: TCP

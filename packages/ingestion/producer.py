@@ -1,3 +1,4 @@
+import os
 # packages/ingestion/producer.py
 from confluent_kafka import Producer
 
@@ -5,7 +6,7 @@ from packages.core.models.events import RawEvent
 
 
 class EventProducer:
-    def __init__(self, bootstrap_servers: str = "localhost:19092"):
+    def __init__(self, bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092")):
         self.producer = Producer({"bootstrap.servers": bootstrap_servers})
 
     def _get_topic(self, tenant_id: str) -> str:
