@@ -117,6 +117,9 @@ class GraphWriter:
         # en JSON, un CONTAINS sur tags_json ne matcherait pas (espace après ':').
         if tags and tags.get("iac_managed") is not None:
             native["iac_managed"] = tags["iac_managed"] == "true"
+        # Sous-type de nœud (P2.2 : cloud_alert / recommendation) promu en natif
+        if tags and tags.get("node_subtype"):
+            native["node_subtype"] = tags["node_subtype"]
         criticality = attributes.get("criticality")
         if isinstance(criticality, dict):
             for axis in CRITICALITY_AXES:

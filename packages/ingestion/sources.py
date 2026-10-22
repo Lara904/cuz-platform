@@ -59,6 +59,10 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
         connectors["terraform"] = TerraformConnector(tenant_id=tenant_id, config={})
     except Exception as e:
         logger.warning("Terraform ignoré : %s", e)
+    sim_url = os.getenv("CLOUD_DETECTION_SIM_URL")
+    if sim_url:
+        from packages.connectors.cloud_detection.connector import CloudDetectionConnector
+        connectors["cloud_detection"] = CloudDetectionConnector(tenant_id, sim_url, {})
     kubeconfig = os.getenv("KUBECONFIG_PATH")
     if kubeconfig:
         try:

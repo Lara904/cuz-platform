@@ -11,6 +11,7 @@ DEFAULT_SOURCE_WEIGHTS: dict[str, float] = {
     "terraform": 0.88,  # IaC
     "minio":      0.85,   # ← AJOUTER
     "gitea":      0.88,   # ← AJOUTER
+    "cloud_detection": 0.85,  # alertes Defender (même ordre que sentinel)
     "manual":     0.80,   # saisie humaine (ex: BIA, processus métier) — comparable à la CMDB
 }
 

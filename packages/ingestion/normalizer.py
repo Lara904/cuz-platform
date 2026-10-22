@@ -1,6 +1,7 @@
 # packages/ingestion/normalizer.py
 import uuid
 
+from packages.connectors.cloud_detection.mapper import CloudDetectionMapper
 from packages.connectors.entra_id.mapper import EntraIDMapper
 from packages.connectors.gitea.mapper import GiteaMapper
 from packages.connectors.kubernetes.mapper import KubernetesMapper
@@ -30,6 +31,8 @@ class Normalizer:
                 self._mappers[key] = TerraformMapper(tenant_id)
             elif source == "kubernetes":
                 self._mappers[key] = KubernetesMapper(tenant_id)
+            elif source == "cloud_detection":
+                self._mappers[key] = CloudDetectionMapper(tenant_id)
         return self._mappers.get(key)
 
     @staticmethod
@@ -68,6 +71,14 @@ class Normalizer:
             elif obj_type == "service_principal":
                 node = self._stamp(mapper.map_service_principal(raw.raw_data["record"]))
                 results.append(self._wrap(raw, node=node))
+
+        elif raw.source == "cloud_detection":
+            record = raw.raw_data["record"]
+            if raw.raw_data.get("object_type") == "alert":
+                node = mapper.map_alert(record)
+            else:
+                node = mapper.map_recommendation(record)
+            results.append(self._wrap(raw, node=self._stamp(node)))
 
         elif raw.source == "kubernetes":
             # Un pod part avec son namespace et son cluster, et leurs arêtes : tout dans

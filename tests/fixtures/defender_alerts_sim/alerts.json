@@ -1,0 +1,18 @@
+{
+  "_comment": "SIMULATEUR : alertes fictives au format de l'API Defender for Cloud (AcmeCorp est 100 % local). Ne pas traiter comme des détections réelles.",
+  "alerts": [
+    {"id": "sim-alert-001", "alert_name": "Compte administrateur sans MFA utilisé", "severity": "HIGH",
+     "rule_id": "IAM-001", "resource_id": "djanaD", "status": "Active",
+     "description": "Connexion d'un compte sans MFA (simulé)."},
+    {"id": "sim-alert-002", "alert_name": "Bucket accessible publiquement", "severity": "HIGH",
+     "rule_id": "STORAGE-PUBLIC-001", "resource_id": "acmecorp-public", "status": "Active",
+     "description": "Accès anonyme détecté sur le bucket (simulé)."},
+    {"id": "sim-alert-003", "alert_name": "Activité inhabituelle sur qs@6.5.2", "severity": "MEDIUM",
+     "rule_id": "SIM-CLOUD-001", "resource_id": "legacy-job", "status": "Resolved",
+     "description": "Comportement anormal d'un conteneur (simulé)."}
+  ],
+  "recommendations": [
+    {"id": "sim-rec-001", "recommendation_name": "Activer le MFA pour les comptes administrateurs",
+     "rule_id": "IAM-001", "resource_id": "djanaD", "remediation": "Activer le MFA (simulé)."}
+  ]
+}

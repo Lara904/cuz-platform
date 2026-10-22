@@ -89,6 +89,18 @@ services:
       disable: true
 
 
+  defender-sim:
+    image: python:3.12-slim
+    container_name: cuz-defender-sim
+    command: ["python", "/sim/server.py"]
+    volumes:
+      - ../../tests/fixtures/defender_alerts_sim:/sim:ro
+    ports:
+      - "9100:9100"   # simulateur Defender for Cloud (fictif)
+    environment:
+      PORT: "9100"
+    restart: unless-stopped
+
 # ── AcmeCorp services ──────────────────────────────────────────
 
   minio:
