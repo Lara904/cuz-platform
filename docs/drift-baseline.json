@@ -1,0 +1,17 @@
+{
+  "real_total": 3,
+  "iac_total": 1,
+  "drift_count": 3,
+  "drift_rate_pct": 100.0,
+  "resources_not_in_iac": [
+    "acmecorp-data",
+    "acmecorp-logs",
+    "acmecorp-public"
+  ],
+  "resources_in_iac_but_missing_real": [
+    "acmecorp-archive"
+  ],
+  "tenant": "acmecorp",
+  "scope": "STORAGE",
+  "measured_at": "2026-10-27T08:35:59.274006+00:00"
+}

@@ -38,7 +38,7 @@ def test_mapper_bucket_node_has_scores_and_iac_tag():
 
 
 def test_mapper_ignores_unknown_resource_types():
-    assert TerraformMapper(TENANT).map_resource({"type": "aws_s3_bucket", "name": "x",
+    assert TerraformMapper(TENANT).map_resource({"type": "google_storage_bucket", "name": "x",
                                                   "attributes": {}}) is None
 
 
@@ -65,3 +65,42 @@ def test_test_connection_fails_on_missing_file(tmp_path):
 
 def test_test_connection_ok_on_fixture():
     assert asyncio.run(TerraformConnector(TENANT, {"path": DEFAULT_TFSTATE}).test_connection())
+
+
+# ── P2.3 : drift IaC et baseline ─────────────────────────────────────────────
+
+from packages.connectors.terraform.mapper import compute_drift  # noqa: E402
+
+
+def test_compute_drift_detects_acmecorp_archive():
+    """AC.6 : acmecorp-archive est déclaré en IaC mais absent du réel."""
+    iac = {"acmecorp-data", "acmecorp-logs", "acmecorp-public", "acmecorp-archive"}
+    real = {"acmecorp-data", "acmecorp-logs", "acmecorp-public"}
+    drift = compute_drift(iac, real)
+    assert drift["resources_in_iac_but_missing_real"] == ["acmecorp-archive"]
+    assert drift["drift_count"] == 0
+
+
+def test_compute_drift_flags_unmanaged_real_resource():
+    drift = compute_drift({"a"}, {"a", "b", "c", "d"})
+    assert drift["resources_not_in_iac"] == ["b", "c", "d"]
+    assert drift["drift_rate_pct"] == 75.0
+
+
+def test_compute_drift_rate_is_none_without_real_resources():
+    assert compute_drift({"a"}, set())["drift_rate_pct"] is None
+
+
+def test_state_path_read_from_environment(monkeypatch, tmp_path):
+    state = tmp_path / "custom.tfstate"
+    state.write_text('{"version": 4, "resources": []}', encoding="utf-8")
+    monkeypatch.setenv("TERRAFORM_STATE_PATH", str(state))
+    assert TerraformConnector(TENANT, {}).path == state
+
+
+def test_aws_and_azure_types_are_mapped():
+    mapper = TerraformMapper(TENANT)
+    assert mapper.map_resource({"type": "aws_s3_bucket", "name": "b",
+                                "attributes": {"bucket": "b"}}).node_type == NodeType.STORAGE
+    assert mapper.map_resource({"type": "aws_instance", "name": "i",
+                                "attributes": {}}).node_type == NodeType.SERVER

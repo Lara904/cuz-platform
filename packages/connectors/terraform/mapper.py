@@ -12,6 +12,11 @@ from packages.core.scoring import compute_confidence, compute_freshness
 RESOURCE_TYPE_TO_NODE_TYPE = {
     "minio_bucket": NodeType.STORAGE,
     "kubernetes_deployment": NodeType.CONTAINER,
+    # P2.3 : types cloud du spec (aucun state AcmeCorp ne les contient aujourd'hui)
+    "minio_s3_bucket": NodeType.STORAGE,
+    "aws_s3_bucket": NodeType.STORAGE,
+    "azurerm_storage_account": NodeType.STORAGE,
+    "aws_instance": NodeType.SERVER,
 }
 
 
@@ -55,3 +60,24 @@ def load_resources(path: Path) -> list[dict]:
                 "attributes": inst.get("attributes", {}),
             })
     return resources
+
+
+def compute_drift(iac_names: set[str], real_names: set[str]) -> dict:
+    """Drift entre ressources gérées par Terraform et ressources réelles observées.
+
+    - resources_not_in_iac : réelles sans équivalent IaC (drift « non géré »)
+    - resources_in_iac_but_missing_real : déclarées en IaC mais absentes du réel (drift « fantôme »)
+    drift_rate_pct = part des ressources réelles non gérées par IaC. Pas de valeur par défaut :
+    si aucune ressource réelle n'est observée, le taux est None.
+    """
+    not_in_iac = real_names - iac_names
+    not_in_real = iac_names - real_names
+    total = len(real_names)
+    return {
+        "real_total": total,
+        "iac_total": len(iac_names),
+        "drift_count": len(not_in_iac),
+        "drift_rate_pct": round(100 * len(not_in_iac) / total, 1) if total else None,
+        "resources_not_in_iac": sorted(not_in_iac),
+        "resources_in_iac_but_missing_real": sorted(not_in_real),
+    }

@@ -1,3 +1,5 @@
+import os
+
 # packages/connectors/terraform/connector.py
 import uuid
 from collections.abc import AsyncIterator
@@ -16,7 +18,9 @@ class TerraformConnector(IConnector):
 
     @property
     def path(self) -> Path:
-        return Path(self.config.get("path", DEFAULT_TFSTATE))  # type: ignore[arg-type]
+        # Priorité : config explicite, variable TERRAFORM_STATE_PATH, fixture AcmeCorp
+        configured = self.config.get("path") or os.getenv("TERRAFORM_STATE_PATH")
+        return Path(configured) if configured else DEFAULT_TFSTATE  # type: ignore[arg-type]
 
     async def test_connection(self) -> bool:
         if not self.path.is_file():
