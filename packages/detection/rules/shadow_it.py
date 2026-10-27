@@ -16,6 +16,7 @@ SHADOW_IT_001 = RuleSpec(
     cypher="""
 MATCH (n:CuzNode {tenant_id: $tenant_id})
 WHERE NOT 'servicenow' IN n.sources AND size(n.sources) > 0
+  AND n.node_subtype IS NULL  // alertes et recommandations cloud ne sont pas des actifs
 RETURN [n.id] AS node_ids, [n.name] AS node_names
 """,
 )

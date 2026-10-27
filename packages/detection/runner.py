@@ -1,8 +1,10 @@
 # packages/detection/runner.py
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
+from packages.connectors.cloud_detection.mapper import deduplicate_against_cypher_findings
 from packages.detection.dedup import deduplicate
 from packages.detection.models import Finding
 from packages.detection.opa_client import OPAClient
@@ -28,6 +30,7 @@ class DetectionRunner:
                     except Exception as e:
                         logger.error("Rule %s failed: %s", rule_fn.__name__, e)
         findings.extend(self.run_opa(tenant_id))
+        findings.extend(self.run_cloud_alerts(tenant_id, {f.rule_id for f in findings}))
         self._fill_confidence(tenant_id, findings)
         return deduplicate(findings)
 
@@ -46,6 +49,35 @@ class DetectionRunner:
         for finding in findings:
             scores = [confidence[n] for n in finding.affected_nodes if n in confidence]
             finding.confidence_score = min(scores) if scores else 0.0
+
+    def run_cloud_alerts(self, tenant_id: str, known_rule_ids: set[str]) -> list[Finding]:
+        """Alertes cloud (nœuds node_subtype='cloud_alert') → findings, après déduplication
+        par rule_id avec les findings Cypher et OPA : un même rule_id n'apparaît qu'une fois."""
+        with self.driver.session() as session:
+            rows = session.run(
+                "MATCH (n:CuzNode {tenant_id: $t, node_subtype: 'cloud_alert'}) "
+                "RETURN n.id AS id, n.name AS name, n.attributes AS attributes",
+                t=tenant_id,
+            ).data()
+        nodes = []
+        for row in rows:
+            attrs = _load_json(row["attributes"])
+            nodes.append(_CloudAlert(id=row["id"], name=row["name"], attributes=attrs))
+        kept = deduplicate_against_cypher_findings(nodes, known_rule_ids)
+        findings: list[Finding] = []
+        for alert in kept:
+            severity = alert.attributes.get("severity")
+            findings.append(Finding(
+                tenant_id=tenant_id,
+                rule_id=alert.attributes.get("rule_id") or "CLOUD-ALERT",
+                severity=severity if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO") else "MEDIUM",
+                title=alert.name,
+                description=alert.attributes.get("description") or alert.name,
+                affected_nodes=[alert.id],
+                affected_node_names=[alert.name],
+                remediation_hint="Voir l'alerte dans Defender for Cloud (source : cloud_detection).",
+            ))
+        return findings
 
     def run_opa(self, tenant_id: str) -> list[Finding]:
         """Évalue les policies OPA sur tous les nœuds du tenant."""
@@ -67,6 +99,13 @@ class DetectionRunner:
             "owner": r["owner"],
         } for r in rows]
         return OPAClient().evaluate_nodes(nodes)
+
+
+@dataclass(frozen=True)
+class _CloudAlert:
+    id: str
+    name: str
+    attributes: dict[str, Any]
 
 
 def _load_json(raw: str | None) -> dict[str, Any]:
