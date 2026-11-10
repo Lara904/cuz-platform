@@ -17,6 +17,14 @@ from packages.core.interfaces.connector import IConnector
 from packages.core.models.events import EventType, RawEvent
 
 
+def _owner_deployment(pod) -> str | None:
+    """Deployment propriétaire : ReplicaSet « <deploy>-<hash> » → <deploy>. None si pod nu."""
+    for ref in pod.metadata.owner_references or []:
+        if ref.kind == "ReplicaSet" and "-" in ref.name:
+            return ref.name.rsplit("-", 1)[0]
+    return None
+
+
 class KubernetesConnector(IConnector):
     def __init__(self, tenant_id: str, kubeconfig_path: str, cluster_name: str = "acmecorp"):
         super().__init__(tenant_id, {})
@@ -74,6 +82,7 @@ class KubernetesConnector(IConnector):
                                        for c in containers),
                     "images": [c.image for c in containers],
                     "labels": pod.metadata.labels or {},
+                    "owner_deployment": _owner_deployment(pod),
                     "is_public_exposed": self._pod_is_public_exposed(pod, services),
                     "phase": pod.status.phase,
                 }))

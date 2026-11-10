@@ -1,17 +1,27 @@
 {
-  "real_total": 3,
-  "iac_total": 1,
-  "drift_count": 3,
-  "drift_rate_pct": 100.0,
+  "real_total": 11,
+  "iac_total": 3,
+  "drift_count": 9,
+  "drift_rate_pct": 81.8,
   "resources_not_in_iac": [
-    "acmecorp-data",
-    "acmecorp-logs",
-    "acmecorp-public"
+    "DEPLOYMENT:cuz-acmecorp/cuz-api",
+    "DEPLOYMENT:cuz-acmecorp/graph-writer",
+    "DEPLOYMENT:cuz-acmecorp/pipeline-consumer",
+    "DEPLOYMENT:kube-system/coredns",
+    "DEPLOYMENT:kube-system/local-path-provisioner",
+    "DEPLOYMENT:kube-system/metrics-server",
+    "STORAGE:acmecorp-data",
+    "STORAGE:acmecorp-logs",
+    "STORAGE:acmecorp-public"
   ],
   "resources_in_iac_but_missing_real": [
-    "acmecorp-archive"
+    "STORAGE:acmecorp-archive"
   ],
   "tenant": "acmecorp",
-  "scope": "STORAGE",
-  "measured_at": "2026-10-27T08:35:59.274006+00:00"
+  "scope": [
+    "STORAGE",
+    "DEPLOYMENT"
+  ],
+  "fresh_threshold": 0.8,
+  "measured_at": "2026-11-10T19:40:21.004086+00:00"
 }

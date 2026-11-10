@@ -87,7 +87,8 @@ def _fake_api(monkeypatch):
     container = SimpleNamespace(image="ubuntu:20.04", security_context=SimpleNamespace(
         privileged=True, run_as_user=0))
     pod = SimpleNamespace(
-        metadata=SimpleNamespace(name="legacy-job", uid="pod-uid-legacy-job", labels={"app": "legacy"}),
+        metadata=SimpleNamespace(name="legacy-job", uid="pod-uid-legacy-job", labels={"app": "legacy"},
+                                 owner_references=[]),
         spec=SimpleNamespace(containers=[container], node_name="k3d-acmecorp-agent-0"),
         status=SimpleNamespace(phase="Running"))
     svc = SimpleNamespace(metadata=SimpleNamespace(name="legacy-svc"),
@@ -160,3 +161,12 @@ def test_namespace_event_links_namespace_to_cluster():
     results = Normalizer().normalize(raw)
     edges = [r.edge for r in results if r.edge]
     assert [e.edge_type for e in edges] == [EdgeType.MEMBER_OF]
+
+
+def test_owner_deployment_from_replicaset_name():
+    from packages.connectors.kubernetes.connector import _owner_deployment
+    pod = SimpleNamespace(metadata=SimpleNamespace(owner_references=[
+        SimpleNamespace(kind="ReplicaSet", name="backend-655845b697")]))
+    assert _owner_deployment(pod) == "backend"
+    naked = SimpleNamespace(metadata=SimpleNamespace(owner_references=None))
+    assert _owner_deployment(naked) is None

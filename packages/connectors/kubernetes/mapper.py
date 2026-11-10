@@ -56,6 +56,7 @@ class KubernetesMapper:
             "images": raw.get("images", []),
             "is_public_exposed": raw.get("is_public_exposed", False),
             "phase": raw.get("phase"),
+            "owner_deployment": raw.get("owner_deployment"),
         }, {"object_type": "pod"})
 
     def _edge(self, edge_type: EdgeType, source: CuzNode, target: CuzNode,

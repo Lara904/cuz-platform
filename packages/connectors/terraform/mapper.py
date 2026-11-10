@@ -65,10 +65,12 @@ def load_resources(path: Path) -> list[dict]:
 def compute_drift(iac_names: set[str], real_names: set[str]) -> dict:
     """Drift entre ressources gérées par Terraform et ressources réelles observées.
 
+    Les ensembles contiennent des clés typées « TYPE:nom » (ex: « STORAGE:acmecorp-archive »,
+    « DEPLOYMENT:production/backend »), pour que buckets et Deployments ne se confondent pas.
+
     - resources_not_in_iac : réelles sans équivalent IaC (drift « non géré »)
     - resources_in_iac_but_missing_real : déclarées en IaC mais absentes du réel (drift « fantôme »)
-    drift_rate_pct = part des ressources réelles non gérées par IaC. Pas de valeur par défaut :
-    si aucune ressource réelle n'est observée, le taux est None.
+    drift_rate_pct = part des ressources réelles non gérées. None si aucune ressource réelle.
     """
     not_in_iac = real_names - iac_names
     not_in_real = iac_names - real_names

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 NATIVE_PROMOTED_KEYS = [
     "has_mfa", "is_public", "privileged", "run_as_root",
     "contains_pii", "exit_plan_status", "owner",
-    "account_enabled", "package_name",
+    "account_enabled", "package_name", "owner_deployment",
 ]
 
 # Neo4j n'accepte pas les maps comme valeur de propriété : la criticité DICT
