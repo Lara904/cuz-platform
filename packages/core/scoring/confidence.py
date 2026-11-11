@@ -12,6 +12,7 @@ DEFAULT_SOURCE_WEIGHTS: dict[str, float] = {
     "minio":      0.85,   # ← AJOUTER
     "gitea":      0.88,   # ← AJOUTER
     "cloud_detection": 0.85,  # alertes Defender (même ordre que sentinel)
+    "vuln_scanner": 0.85,  # scanner de vulnérabilités (même ordre que cloud_detection)
     "manual":     0.80,   # saisie humaine (ex: BIA, processus métier) — comparable à la CMDB
 }
 

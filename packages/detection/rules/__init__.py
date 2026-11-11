@@ -9,7 +9,8 @@ from packages.detection.models import Finding, Severity
 @dataclass(frozen=True)
 class RuleSpec:
     """Une règle = une requête Cypher. La requête DOIT renvoyer les colonnes
-    `node_ids` et `node_names` (listes) et filtrer sur tenant_id."""
+    `node_ids` et `node_names` (listes) et filtrer sur tenant_id. Toute autre colonne
+    renvoyée est conservée telle quelle dans Finding.metadata."""
 
     rule_id: str
     severity: Severity
@@ -35,6 +36,7 @@ def make_rule(spec: RuleSpec) -> RuleFn:
                 affected_nodes=list(row["node_ids"]),
                 affected_node_names=list(row["node_names"]),
                 remediation_hint=spec.remediation_hint,
+                metadata={k: v for k, v in row.items() if k not in ("node_ids", "node_names")},
             )
             for row in rows
         ]

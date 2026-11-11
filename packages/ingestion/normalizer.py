@@ -8,6 +8,7 @@ from packages.connectors.kubernetes.mapper import KubernetesMapper
 from packages.connectors.minio_connector.mapper import MinIOMapper
 from packages.connectors.servicenow.mapper import ServiceNowMapper
 from packages.connectors.terraform.mapper import TerraformMapper
+from packages.connectors.vuln_scanner.mapper import VulnScannerMapper
 from packages.core.models.events import NormalizedEvent, RawEvent
 
 
@@ -33,6 +34,8 @@ class Normalizer:
                 self._mappers[key] = KubernetesMapper(tenant_id)
             elif source == "cloud_detection":
                 self._mappers[key] = CloudDetectionMapper(tenant_id)
+            elif source == "vuln_scanner":
+                self._mappers[key] = VulnScannerMapper(tenant_id)
         return self._mappers.get(key)
 
     @staticmethod
@@ -79,6 +82,11 @@ class Normalizer:
             else:
                 node = mapper.map_recommendation(record)
             results.append(self._wrap(raw, node=self._stamp(node)))
+
+        elif raw.source == "vuln_scanner":
+            if raw.raw_data.get("object_type") == "cve_finding":
+                node = self._stamp(mapper.map_cve(raw.raw_data["record"]))
+                results.append(self._wrap(raw, node=node))
 
         elif raw.source == "kubernetes":
             # Un pod part avec son namespace et son cluster, et leurs arêtes : tout dans

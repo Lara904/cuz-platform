@@ -63,6 +63,13 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
     if sim_url:
         from packages.connectors.cloud_detection.connector import CloudDetectionConnector
         connectors["cloud_detection"] = CloudDetectionConnector(tenant_id, sim_url, {})
+    vuln_url = os.getenv("VULN_SCANNER_URL")
+    vuln_fixtures = os.getenv("VULN_SCANNER_FIXTURES", "tests/fixtures/acmecorp_cves.json")
+    if vuln_url or os.path.exists(vuln_fixtures):
+        from packages.connectors.vuln_scanner.connector import VulnScannerConnector
+        connectors["vuln_scanner"] = VulnScannerConnector(
+            tenant_id, scanner_url=vuln_url or "", api_key=os.getenv("VULN_SCANNER_API_KEY", ""),
+            fixtures_path=None if vuln_url else vuln_fixtures)
     kubeconfig = os.getenv("KUBECONFIG_PATH")
     if kubeconfig:
         try:
