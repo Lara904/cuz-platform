@@ -19,9 +19,11 @@ seront ré-estimés sur les étiquettes de la validation humaine (P2.6).
 Usage : python -m packages.entity_resolution.probabilistic_resolver --tenant acmecorp [--train]
 """
 import argparse
+import asyncio
 import json
 import logging
 import re
+import shutil
 import sys
 from collections.abc import Iterable
 from pathlib import Path
@@ -45,6 +47,17 @@ logger = logging.getLogger("er-probabilistic")
 # Sources jamais candidates à la fusion : un nœud IaC (déclaré) et son équivalent réel (observé)
 # doivent rester distincts, c'est ce qui permet de mesurer le drift (P2.3).
 EXCLUDED_SOURCES = frozenset({"terraform"})
+
+# Réentraînement sur décisions humaines (P2.6). Seules les paires validées « merge » servent (positifs) ;
+# estimate_m_from_pairwise_labels de Splink ignore les scores d'étiquette et un niveau jamais observé
+# recevrait m = 0 : on mélange donc fréquences observées et m d'expert (pseudo-comptes).
+MIN_POSITIVE_LABELS = 20
+M_SMOOTHING_STRENGTH = 20
+
+
+class InsufficientLabelsError(Exception):
+    """Pas assez de paires validées pour recalibrer sans dégrader le modèle."""
+
 
 MODEL_DIR = Path(__file__).resolve().parents[2] / "config" / "er"
 
@@ -179,6 +192,61 @@ class ProbabilisticResolver:
         }
 
 
+def _gamma_levels(comparison: dict) -> list[tuple[int, dict]]:
+    """(gamma, niveau) hors niveau NULL. Le modèle sérialisé n'a pas de clé gamma : les niveaux sont
+    ordonnés du plus spécifique au plus général, donc gamma = nb_niveaux - 1 - position."""
+    levels = [lv for lv in comparison["comparison_levels"] if not lv.get("is_null_level")]
+    return [(len(levels) - 1 - i, lv) for i, lv in enumerate(levels)]
+
+
+def recalibrate_m(model: dict, gamma_counts: dict[str, dict[int, int]],
+                  strength: int = M_SMOOTHING_STRENGTH) -> dict:
+    """Fonction pure : m_new = (observés + strength * m_ancien) / (N + strength), par comparaison.
+    `gamma_counts` : output_column_name -> {gamma -> nb de paires validées}."""
+    for comparison in model["comparisons"]:
+        counts = gamma_counts.get(comparison["output_column_name"], {})
+        levels = _gamma_levels(comparison)
+        n = sum(counts.get(gamma, 0) for gamma, _ in levels)
+        if n == 0:
+            continue
+        for gamma, lv in levels:
+            lv["m_probability"] = (counts.get(gamma, 0) + strength * lv["m_probability"]) / (n + strength)
+    return model
+
+
+def _m_snapshot(model: dict) -> dict[str, list[float]]:
+    return {c["output_column_name"]: [round(lv["m_probability"], 4) for _, lv in _gamma_levels(c)]
+            for c in model["comparisons"]}
+
+
+def retrain_from_merged_pairs(resolver: "ProbabilisticResolver", df: pd.DataFrame,
+                              merged_pairs: list[tuple[str, str]],
+                              path: Path | None = None) -> dict:
+    """Recalibre les m du modèle sur les paires validées « merge ». L'ancien modèle est conservé
+    (*.prev.json). Lève InsufficientLabelsError sous MIN_POSITIVE_LABELS paires exploitables."""
+    target = path or model_path(resolver.tenant_id)
+    resolver.load_model(df, target)
+    assert resolver.linker is not None
+    predictions = resolver.linker.inference.predict().as_pandas_dataframe()
+    wanted = {frozenset(p) for p in merged_pairs}
+    labelled = predictions[[frozenset(p) in wanted for p in zip(
+        predictions["unique_id_l"], predictions["unique_id_r"], strict=True)]]
+    if len(labelled) < MIN_POSITIVE_LABELS:
+        raise InsufficientLabelsError(
+            f"{len(labelled)} paire(s) validée(s) exploitable(s) sur {len(wanted)} ; "
+            f"minimum {MIN_POSITIVE_LABELS}")
+    model = json.loads(target.read_text(encoding="utf-8"))
+    before = _m_snapshot(model)
+    counts = {c["output_column_name"]: {int(k): int(v) for k, v in
+                                        labelled[f"gamma_{c['output_column_name']}"].value_counts().items()}
+              for c in model["comparisons"]}
+    recalibrate_m(model, counts)
+    shutil.copyfile(target, target.with_suffix(".prev.json"))
+    target.write_text(json.dumps(model, indent=2), encoding="utf-8")
+    resolver.load_model(df, target)
+    return {"labels_used": len(labelled), "m_before": before, "m_after": _m_snapshot(model)}
+
+
 def measure_duplicate_rate(total_nodes: int, duplicate_pairs: int) -> float:
     """Part (%) de nœuds en doublon estimé : paires >= seuil de fusion auto / nœuds."""
     if total_nodes == 0:
@@ -208,11 +276,30 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tenant", required=True)
     parser.add_argument("--train", action="store_true", help="réentraîne et sauvegarde le modèle")
+    parser.add_argument("--retrain-from-decisions", action="store_true",
+                        help="recalibre les m sur les paires validées (er_decisions)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     df = graph_to_dataframe(args.tenant)
     resolver = ProbabilisticResolver(args.tenant)
+    if args.retrain_from_decisions:
+        from services.api import er_audit
+        from services.api.audit import get_pool
+
+        async def _merged() -> list[tuple[str, str]]:
+            try:
+                return await er_audit.merged_pairs(args.tenant)
+            finally:
+                await (await get_pool()).close()
+
+        try:
+            report = retrain_from_merged_pairs(resolver, df, asyncio.run(_merged()))
+        except InsufficientLabelsError as e:
+            logger.error("réentraînement refusé : %s", e)
+            return 1
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
     if args.train or not model_path(args.tenant).exists():
         resolver.train(df)
         logger.info("modèle sauvegardé : %s", resolver.save_model())

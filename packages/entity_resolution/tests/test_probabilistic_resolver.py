@@ -156,3 +156,57 @@ def test_nodes_to_dataframe_uses_first_source_and_ip():
                    attributes={"ip_address": "10.0.0.1"})
     row = nodes_to_dataframe([node]).iloc[0]
     assert (row["name"], row["ip_address"], row["source"]) == ("srv01", "10.0.0.1", "servicenow")
+
+
+# ── P2.6 : réentraînement sur décisions humaines ─────────────────────────────
+
+from packages.entity_resolution.probabilistic_resolver import (  # noqa: E402
+    MIN_POSITIVE_LABELS,
+    InsufficientLabelsError,
+    recalibrate_m,
+    retrain_from_merged_pairs,
+)
+
+
+def _model(m_name=(0.45, 0.35, 0.15, 0.05)):
+    levels = [{"is_null_level": True}] + [{"m_probability": m} for m in m_name]  # gamma 3, 2, 1, 0
+    return {"comparisons": [{"output_column_name": "name", "comparison_levels": levels}]}
+
+
+def test_recalibrate_m_blends_observed_and_expert_values():
+    model = recalibrate_m(_model(), {"name": {3: 30, 2: 10}}, strength=20)  # 40 paires : 75 % exact, 25 % JW.9
+    m = [lv["m_probability"] for lv in model["comparisons"][0]["comparison_levels"] if not lv.get("is_null_level")]
+    assert m[0] == pytest.approx((30 + 20 * 0.45) / 60)  # gamma 3 : exact
+    assert m[3] == pytest.approx((0 + 20 * 0.05) / 60)
+    assert m[3] > 0  # niveau jamais observé : jamais ramené à 0
+    assert sum(m) == pytest.approx(1.0)
+
+
+def test_recalibrate_m_without_observation_changes_nothing():
+    assert recalibrate_m(_model(), {}) == _model()
+
+
+def test_retrain_refuses_too_few_labels(tmp_path):
+    df, truth = synthetic_graph()
+    resolver = ProbabilisticResolver("synthetic")
+    resolver.train(df)
+    path = resolver.save_model(tmp_path / "model.json")
+    few = [tuple(p) for p in list(truth["both"])[: MIN_POSITIVE_LABELS - 1]]
+    with pytest.raises(InsufficientLabelsError):
+        retrain_from_merged_pairs(resolver, df, few, path)
+    assert not path.with_suffix(".prev.json").exists()  # modèle intact
+
+
+def test_retrain_updates_m_keeps_previous_model_and_reloads(tmp_path):
+    df, truth = synthetic_graph()
+    resolver = ProbabilisticResolver("synthetic")
+    resolver.train(df)
+    path = resolver.save_model(tmp_path / "model.json")
+    validated = [tuple(p) for p in truth["both"] | truth["ip"]]  # 24 paires validées (>= minimum)
+    report = retrain_from_merged_pairs(resolver, df, validated, path)
+    assert report["labels_used"] == len(validated) >= MIN_POSITIVE_LABELS
+    assert report["m_after"]["ip_address"] != report["m_before"]["ip_address"]
+    assert path.with_suffix(".prev.json").exists()
+    reloaded = ProbabilisticResolver("synthetic")
+    reloaded.load_model(df, path)  # le modèle recalibré se recharge sans réentraînement
+    assert not reloaded.predict_candidate_pairs(df).empty

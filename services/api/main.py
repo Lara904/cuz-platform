@@ -13,6 +13,7 @@ from services.api.routers import auth, connectors, coverage, dashboard, entity_r
 from services.api.routers.tenants import init_db as init_tenants_db
 from services.api.routers.connectors import init_db as init_connectors_db
 from services.api.audit import init_audit_db
+from services.api.er_audit import init_er_db
 
 
 @asynccontextmanager
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     await init_tenants_db()
     await init_connectors_db()
     await init_audit_db()
+    await init_er_db()
     yield
     # Shutdown
     print("CUz API arrêt.")

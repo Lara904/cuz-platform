@@ -24,6 +24,17 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
   return res.json() as Promise<T>;
 }
 
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const t = token();
+  const res = await fetch(new URL(path, API_URL), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText} : ${path}`);
+  return res.json() as Promise<T>;
+}
+
 export interface DashboardStats {
   node_count: number;
   by_severity: Record<string, number>;
@@ -108,3 +119,52 @@ export interface TenantGraph {
 
 export const fetchGraph = (tenant: string) =>
   apiGet<TenantGraph>(`/api/v1/tenants/${tenant}/graph/`);
+
+// ── Entity Resolution : validation humaine des paires (P2.6) ─────────────────
+export interface ErNode {
+  id: string;
+  name: string;
+  node_type: string;
+  sources: string[] | null;
+  confidence_score: number;
+  freshness_score: number;
+  attributes: Record<string, unknown>;
+  tags: Record<string, string>;
+}
+
+export interface ErPair {
+  pair_id: string;
+  match_probability: number;
+  node_a: ErNode;
+  node_b: ErNode;
+  flagged: boolean;
+}
+
+export interface ErPairsPage {
+  total: number;
+  page: number;
+  size: number;
+  pairs: ErPair[];
+}
+
+export interface ErDecisionStats {
+  total_reviewed: number;
+  total_decisions: number;
+  merged: number;
+  rejected: number;
+  flagged: number;
+}
+
+export type ErDecision = "merge" | "reject" | "flag";
+
+export const fetchPendingPairs = (tenant: string, page = 1, size = 20) =>
+  apiGet<ErPairsPage>(`/api/v1/tenants/${tenant}/entity-resolution/pairs`, { page, size });
+
+export const fetchErDecisionStats = (tenant: string) =>
+  apiGet<ErDecisionStats>(`/api/v1/tenants/${tenant}/entity-resolution/decisions/stats`);
+
+// Le relecteur est l'identité du token côté serveur : jamais envoyé par le client.
+export const decidePair = (tenant: string, pairId: string, decision: ErDecision, note?: string) =>
+  apiPost<{ status: string; pair_id: string; decision: ErDecision; graph_merge_applied: boolean }>(
+    `/api/v1/tenants/${tenant}/entity-resolution/pairs/${pairId}/decide`, { decision, note },
+  );
