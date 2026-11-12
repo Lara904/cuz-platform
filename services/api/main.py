@@ -3,6 +3,7 @@ services/api/main.py
 Point d'entrée FastAPI de l'API CUz — Tenant management & Authentification (P0.8)
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from services.api.audit import init_audit_db
 from services.api.er_audit import init_er_db
+from services.api.findings_feed import FindingsFeed, feed_enabled
 from services.api.middleware.logging import LoggingMiddleware
 from services.api.middleware.rate_limit import RateLimitMiddleware
 from services.api.routers import (
@@ -38,8 +40,20 @@ async def lifespan(app: FastAPI):
     await init_connectors_db()
     await init_audit_db()
     await init_er_db()
+    # Findings réactifs (P2.8) : un échec d'abonnement ne doit jamais empêcher l'API de démarrer,
+    # elle retombe alors sur le recalcul complet (run_all)
+    feed: FindingsFeed | None = None
+    if feed_enabled():
+        try:
+            feed = FindingsFeed(findings.ingest_reactive)
+            feed.start()
+        except Exception:
+            logging.getLogger(__name__).exception("flux de findings réactifs non démarré")
+            feed = None
     yield
     # Shutdown
+    if feed is not None:
+        feed.stop()
     print("CUz API arrêt.")
 
 

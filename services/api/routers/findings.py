@@ -18,11 +18,17 @@ Chaque changement de statut est d'abord écrit dans l'audit trail PostgreSQL
 Déduplication : clé (rule_id, affected_nodes), voir packages/detection/dedup.py.
 Stockage des statuts en mémoire pour P1 ; id, statut et justification sont
 conservés entre deux calculs grâce à la même clé.
+
+Findings réactifs (P2.8) : le MutationConsumer publie les nouveaux findings sur
+cuz.findings.{tenant} ; services/api/findings_feed.py les lit et appelle `ingest_reactive()`,
+qui les ajoute au store sans attendre un recalcul complet. `run_all()` reste la référence : un
+recalcul remplace le store, et les findings réactifs arrivés PENDANT ce calcul y sont fusionnés.
 """
 
 import csv
 import io
 import logging
+import threading
 from datetime import UTC, datetime
 from functools import cache
 
@@ -48,6 +54,10 @@ SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 
 # tenant_id -> {clé de déduplication -> Finding}
 _store: dict[str, dict[FindingKey, Finding]] = {}
+# Le store est lu par les requêtes (threadpool) et écrit par le flux réactif (thread dédié)
+_lock = threading.RLock()
+# tenant_id -> un tampon par calcul complet en cours : findings réactifs arrivés pendant le calcul
+_scan_buffers: dict[str, list[dict[FindingKey, Finding]]] = {}
 
 
 @cache
@@ -59,23 +69,67 @@ def _detect(tenant_id: str) -> list[Finding]:
     return _runner().run_all(tenant_id)
 
 
+def _adopt(finding: Finding, previous: dict[FindingKey, Finding]) -> Finding:
+    """Reprend id, statut, date de création et justification d'un finding déjà connu."""
+    old = previous.get(fingerprint(finding))
+    if old is not None:
+        finding.id = old.id
+        finding.status = old.status
+        finding.created_at = old.created_at
+        finding.metadata = old.metadata
+    return finding
+
+
+def ingest_reactive(finding: Finding) -> bool:
+    """Ajoute un finding publié par le MutationConsumer. Retourne True s'il devient visible.
+
+    Un tenant dont le store n'a jamais été calculé n'est pas alimenté : son premier calcul complet
+    relira le graphe et retrouvera ce finding. Un finding déjà connu n'écrase rien (statut conservé).
+    """
+    key = fingerprint(finding)
+    with _lock:
+        for buffer in _scan_buffers.get(finding.tenant_id, []):
+            buffer.setdefault(key, finding)
+        store = _store.get(finding.tenant_id)
+        if store is None or key in store:
+            return False
+        store[key] = finding
+        return True
+
+
 def _load(tenant_id: str, refresh: bool = False) -> list[Finding]:
     if refresh or tenant_id not in _store:
-        previous = _store.get(tenant_id, {})
-        merged: dict[FindingKey, Finding] = {}
-        for finding in _detect(tenant_id):
-            key = fingerprint(finding)
-            old = previous.get(key)
-            if old is not None:  # conserver id, statut, justification entre deux calculs
-                finding.id = old.id
-                finding.status = old.status
-                finding.created_at = old.created_at
-                finding.metadata = old.metadata
-            merged[key] = finding
-        _store[tenant_id] = merged
-    findings = list(_store[tenant_id].values())
+        buffer: dict[FindingKey, Finding] = {}
+        with _lock:
+            _scan_buffers.setdefault(tenant_id, []).append(buffer)
+        try:
+            detected = _detect(tenant_id)
+        except BaseException:
+            _drop_buffer(tenant_id, buffer)
+            raise
+        with _lock:
+            previous = _store.get(tenant_id, {})
+            merged: dict[FindingKey, Finding] = {}
+            for finding in detected:
+                merged[fingerprint(finding)] = _adopt(finding, previous)
+            for key, finding in buffer.items():  # arrivés pendant le calcul, absents du résultat
+                merged.setdefault(key, _adopt(finding, previous))
+            _store[tenant_id] = merged
+            _drop_buffer(tenant_id, buffer)
+    with _lock:
+        findings = list(_store[tenant_id].values())
     findings.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 9), -f.confidence_score))
     return findings
+
+
+def _drop_buffer(tenant_id: str, buffer: dict[FindingKey, Finding]) -> None:
+    with _lock:
+        # identité, pas égalité : deux tampons vides sont égaux
+        remaining = [b for b in _scan_buffers.get(tenant_id, []) if b is not buffer]
+        if remaining:
+            _scan_buffers[tenant_id] = remaining
+        else:
+            _scan_buffers.pop(tenant_id, None)
 
 
 async def _load_async(tenant_id: str, refresh: bool = False) -> list[Finding]:

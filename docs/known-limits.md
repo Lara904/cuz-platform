@@ -111,10 +111,6 @@ dépend d'une propriété seule (ex. CIS-001) : ces entrées restent à relire.
 Lit `cuz.graph.mutations.{tenant}` en continu, évalue chaque lot de mutations (une fois par règle routée
 et par lot, pas par mutation) et publie les nouveaux findings sur `cuz.findings.{tenant}`.
 `python -m packages.detection.mutation_consumer --tenant acmecorp`, une réplica par tenant.
-- **Rien ne lit encore `cuz.findings.{tenant}`** : l'API garde son store en mémoire alimenté par
-  `run_all()` (`services/api/routers/findings.py`). Un finding réactif n'apparaît donc dans le dashboard
-  qu'au prochain recalcul de l'API. Le brancher (consumer côté API ou table PostgreSQL des findings)
-  reste à faire : c'est le dernier maillon pour que la détection réactive soit visible des utilisateurs.
 - Non déployé sur le cluster : aucun manifeste pour ce consumer, comme pour le writer et l'ingestion
   (processus local).
 - Déduplication des findings déjà publiés en mémoire : un redémarrage republie une fois les findings encore
@@ -126,3 +122,25 @@ et par lot, pas par mutation) et publie les nouveaux findings sur `cuz.findings.
   un superviseur qui le relance.
 - Non lancé sur le tenant `acmecorp` réel : la validation live utilise un tenant jetable. Le comportement sous
   une rafale de dizaines de milliers de mutations n'est couvert que par les tests unitaires (lots de 40).
+
+### Lien API ← `cuz.findings.{tenant}` (`services/api/findings_feed.py`)
+L'API lit `cuz.findings.*` (abonnement par motif, tous les tenants) et ajoute chaque finding à son store via
+`findings.ingest_reactive()`, sans attendre un recalcul. Validé avec un vrai uvicorn : perte de MFA →
+visible dans `GET /findings` en 0,22 s (5 essais, un seul calcul complet, aucun `/refresh`) ; avec
+`CUZ_FINDINGS_FEED=false`, le finding n'apparaît jamais (témoin négatif). Mesure locale.
+- **Store en mémoire, par réplica** : chaque réplica de l'API a son propre store et son propre groupe
+  Kafka (offset `latest`, sans commit) : il voit tous les messages mais ne rejoue pas l'historique. Un
+  redémarrage vide le store ; le premier GET refait un calcul complet.
+- **Un tenant jamais chargé n'est pas alimenté** : son premier calcul complet relit le graphe. Les findings
+  arrivés *pendant* un calcul sont fusionnés dans le résultat.
+- **`run_all()` reste la référence** : un recalcul (premier GET ou `/refresh`) remplace le store, donc un
+  finding réactif que `run_all()` ne produit pas (OPA, alertes cloud, règle non routée) disparaît à ce moment.
+  Rien ne ferme un finding réactif entre deux recalculs (cf. « pas de clôture de finding sur mutation »).
+- **Aucune persistance** : l'état d'un finding (acquitté, faux positif) vit dans le store en mémoire ; seul
+  l'audit trail PostgreSQL survit à un redémarrage. Une table des findings reste à faire, et rendrait le
+  flux réactif durable et partagé entre réplicas.
+- **Broker coupé** : l'API démarre et répond quand même (le flux journalise au plus une fois par minute) ;
+  elle retombe sur le recalcul complet. Un finding publié pendant la coupure est perdu pour le store
+  (pas de rejeu) jusqu'au prochain recalcul.
+- Nouveaux topics (nouveau tenant) découverts en 10 s au plus (`topic.metadata.refresh.interval.ms`).
+- `CUZ_FINDINGS_FEED=false` désactive le flux.
