@@ -84,12 +84,15 @@ async def dashboard_stats(tenant_id: str, _: TokenData = Depends(require_role(Ro
     node_count = await run_in_threadpool(_node_count, tenant_id)
     health = await run_in_threadpool(_health_score, tenant_id)
     by_severity: dict[str, int] = {}
+    by_tier: dict[str, int] = {}
     for f in findings:
         if f.status == "open":
             by_severity[f.severity] = by_severity.get(f.severity, 0) + 1
+            by_tier[str(f.tier)] = by_tier.get(str(f.tier), 0) + 1
     return {
         "node_count": node_count,
         "by_severity": by_severity,
+        "by_tier": by_tier,
         "open": sum(by_severity.values()),
         "health_score": health,
     }

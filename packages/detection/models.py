@@ -3,7 +3,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from packages.detection.tier_classifier import classify
 
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 FindingStatus = Literal["open", "acknowledged", "false_positive", "resolved"]
@@ -25,3 +27,10 @@ class Finding(BaseModel):  # type: ignore[misc, unused-ignore]  # pydantic absen
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = {}
+
+    @computed_field  # type: ignore[prop-decorator, misc, untyped-decorator, unused-ignore]
+    @property
+    def tier(self) -> int:
+        """Tier opérationnel (P2.9), calculé depuis rule_id : jamais stocké ni lu depuis un message,
+        donc cohérent avec RULE_TIER_MAPPING et impossible à forger. Voir docs/tier-mapping.md."""
+        return int(classify(self.rule_id))

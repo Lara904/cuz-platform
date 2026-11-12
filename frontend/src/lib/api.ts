@@ -38,6 +38,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 export interface DashboardStats {
   node_count: number;
   by_severity: Record<string, number>;
+  by_tier?: Record<string, number>;
   open: number;
   health_score: number | null;
 }
@@ -46,6 +47,8 @@ export interface Finding {
   id: string;
   rule_id: string;
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  /** Tier opérationnel (P2.9) : 0 alerte, 1 PR GitOps, 2 jumeau, 3 canary + humain, 4 humain seul */
+  tier: 0 | 1 | 2 | 3 | 4;
   title: string;
   affected_node_names: string[];
   confidence_score: number;

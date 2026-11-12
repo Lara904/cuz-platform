@@ -8,6 +8,15 @@ const SEVERITY_STYLE: Record<Finding["severity"], string> = {
   INFO: "bg-slate-100 text-slate-700",
 };
 
+// Tier opérationnel (P2.9) : seul le Tier 1 peut s'exécuter sans validation humaine
+const TIER_LABEL: Record<Finding["tier"], { text: string; hint: string; style: string }> = {
+  0: { text: "T0", hint: "Alerte seulement, aucun impact", style: "bg-slate-100 text-slate-700" },
+  1: { text: "T1", hint: "PR GitOps, réversible", style: "bg-green-100 text-green-800" },
+  2: { text: "T2", hint: "Jumeau requis avant exécution", style: "bg-yellow-100 text-yellow-800" },
+  3: { text: "T3", hint: "Canary + validation humaine", style: "bg-orange-100 text-orange-800" },
+  4: { text: "T4", hint: "Humain uniquement, jamais automatisé", style: "bg-red-100 text-red-800" },
+};
+
 export function FindingsTable({ findings, loading }: { findings: Finding[]; loading: boolean }) {
   if (loading) return <p className="text-sm text-slate-500">Chargement des findings…</p>;
   if (findings.length === 0) return <p className="text-sm text-slate-500">Aucun finding ouvert.</p>;
@@ -17,6 +26,7 @@ export function FindingsTable({ findings, loading }: { findings: Finding[]; load
         <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
           <tr>
             <th className="px-3 py-2">Sévérité</th>
+            <th className="px-3 py-2">Tier</th>
             <th className="px-3 py-2">Règle</th>
             <th className="px-3 py-2">Titre</th>
             <th className="px-3 py-2">Nœuds</th>
@@ -30,6 +40,14 @@ export function FindingsTable({ findings, loading }: { findings: Finding[]; load
               <td className="px-3 py-2">
                 <span className={`rounded px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLE[f.severity]}`}>
                   {f.severity}
+                </span>
+              </td>
+              <td className="px-3 py-2">
+                <span
+                  title={TIER_LABEL[f.tier].hint}
+                  className={`rounded px-2 py-0.5 text-xs font-medium ${TIER_LABEL[f.tier].style}`}
+                >
+                  {TIER_LABEL[f.tier].text}
                 </span>
               </td>
               <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{f.rule_id}</td>
