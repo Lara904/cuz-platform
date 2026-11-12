@@ -79,6 +79,7 @@ def test_stats_counts_only_open_findings(monkeypatch):
         "node_count": 209,
         "by_severity": {"CRITICAL": 1, "HIGH": 1},
         "by_tier": {"4": 2},  # règles "A" et "B" non mappées : Tier 4 par défaut (fail-safe)
+        "detection_errors": [],
         "open": 2,
         "health_score": 0.92,
     }

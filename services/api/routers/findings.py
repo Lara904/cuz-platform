@@ -56,6 +56,8 @@ SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 _store: dict[str, dict[FindingKey, Finding]] = {}
 # Le store est lu par les requêtes (threadpool) et écrit par le flux réactif (thread dédié)
 _lock = threading.RLock()
+# tenant_id -> erreurs du DERNIER calcul complet (OPA injoignable, règle en échec...). Vide = calcul complet.
+_detection_errors: dict[str, list[str]] = {}
 # tenant_id -> un tampon par calcul complet en cours : findings réactifs arrivés pendant le calcul
 _scan_buffers: dict[str, list[dict[FindingKey, Finding]]] = {}
 
@@ -66,7 +68,16 @@ def _runner() -> DetectionRunner:
 
 
 def _detect(tenant_id: str) -> list[Finding]:
-    return _runner().run_all(tenant_id)
+    findings, errors = _runner().run_all_with_status(tenant_id)
+    with _lock:
+        _detection_errors[tenant_id] = errors
+    return findings
+
+
+def detection_errors(tenant_id: str) -> list[str]:
+    """Erreurs du dernier calcul complet : non vide = détection dégradée, des findings peuvent manquer."""
+    with _lock:
+        return list(_detection_errors.get(tenant_id, []))
 
 
 def _adopt(finding: Finding, previous: dict[FindingKey, Finding]) -> Finding:
@@ -209,6 +220,7 @@ async def findings_stats(tenant_id: str, _: TokenData = Depends(require_role(Rol
         "total": len(findings),
         "by_severity": by_severity,
         "open": sum(1 for f in findings if f.status == "open"),
+        "detection_errors": detection_errors(tenant_id),
     }
 
 

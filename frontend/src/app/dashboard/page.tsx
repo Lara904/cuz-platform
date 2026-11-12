@@ -32,6 +32,13 @@ export default function DashboardPage() {
         </p>
       )}
 
+      {(stats?.detection_errors?.length ?? 0) > 0 && (
+        <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <strong>Détection dégradée :</strong> des findings peuvent manquer, ne pas lire l&apos;absence de
+          finding comme « aucun risque ». {stats?.detection_errors?.join(" · ")}.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard label="Nœuds total" value={stats?.node_count ?? "---"} loading={statsLoading} color="blue" />
         <KpiCard label="CRITICAL" value={stats?.by_severity?.CRITICAL ?? 0} loading={statsLoading} color="red" />

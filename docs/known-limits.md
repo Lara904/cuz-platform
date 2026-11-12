@@ -144,3 +144,40 @@ visible dans `GET /findings` en 0,22 s (5 essais, un seul calcul complet, aucun 
   (pas de rejeu) jusqu'au prochain recalcul.
 - Nouveaux topics (nouveau tenant) découverts en 10 s au plus (`topic.metadata.refresh.interval.ms`).
 - `CUZ_FINDINGS_FEED=false` désactive le flux.
+
+## Policies OPA : chargement garanti, échecs jamais silencieux
+
+Avant : `load_policies()` n'était appelée par aucun code de production, et OPA répond HTTP 200 avec `{}` quand
+une policy n'est pas chargée (par exemple après le redémarrage de son conteneur, qui les garde en mémoire).
+Le client y lisait « aucune violation » : zéro finding OPA, zéro erreur.
+
+Désormais (`packages/detection/opa_client.py`) :
+- `ensure_policies()` compare les policies d'OPA au dépôt (texte exact) et recharge celles qui manquent ou
+  diffèrent, avant chaque évaluation et au démarrage de l'API. La réparation est journalisée (WARNING).
+- `evaluate_nodes()` lève `OPAError` (avec `partial_findings`) si OPA est injoignable, refuse une policy,
+  répond sans champ `result` (package indéfini) ou répond en erreur. « Évalué, aucune violation »
+  (`{"result": {}}`) reste distinct de « policy absente » (`{}`).
+- `DetectionRunner.run_all_with_status()` renvoie `(findings, erreurs)` : l'échec d'OPA ou d'une règle Cypher
+  ne fait pas tomber le calcul mais est dit. L'API l'expose dans `detection_errors` (`/findings/stats` et
+  `/dashboard/stats`) et le dashboard affiche une bannière « Détection dégradée ».
+
+Validé sur le conteneur OPA réel : sans aucune policy → 74 findings OPA après auto-réparation (0 avant) ;
+policy périmée → rechargée seule ; OPA injoignable → findings Cypher conservés, erreur signalée, réponse
+immédiate ; `test_opa_iam_policy_on_live_graph`, qui échouait, passe depuis un OPA remis à zéro.
+
+Limites :
+- **`GET /findings/` et l'export CSV ne portent pas le drapeau** : seuls les endpoints de stats et la bannière du
+  dashboard le disent. Un client qui ne lit que la liste ne verrait pas la dégradation.
+- **Les erreurs vivent en mémoire, par tenant, pour le dernier calcul complet** : elles ne disparaissent qu'au
+  calcul complet suivant (premier GET après redémarrage ou `/refresh`), pas dès qu'OPA revient. Les findings
+  réactifs (P2.8) ne les mettent pas à jour.
+- **La détection réactive n'évalue toujours pas OPA** (cf. P2.8) : OPA n'est interrogé qu'à chaque calcul
+  complet. Un OPA coupé entre deux calculs complets n'est vu qu'au suivant.
+- **Un OPA injoignable arrête l'évaluation OPA au premier échec réseau** (inutile d'insister nœud par nœud) ;
+  les erreurs HTTP isolées d'un package n'arrêtent pas les autres. Dans les deux cas l'erreur est remontée.
+- **La comparaison est textuelle** : reformater un `.rego` sans en changer le sens provoque un rechargement.
+  Elle ne détecte pas une policy dont la *logique* est fausse, seulement absente, refusée ou indéfinie.
+- **Aucune persistance côté OPA** : le conteneur garde ses policies en mémoire, l'auto-réparation les remet.
+  Les monter depuis le dépôt (`opa run --server /policies`) serait une protection en profondeur, non faite ici
+  (changement d'infra).
+- Le contrôle ajoute une requête `GET /v1/policies` par calcul complet.

@@ -7,7 +7,7 @@ from typing import Any
 from packages.connectors.cloud_detection.mapper import deduplicate_against_cypher_findings
 from packages.detection.dedup import deduplicate
 from packages.detection.models import Finding
-from packages.detection.opa_client import OPAClient
+from packages.detection.opa_client import OPAClient, OPAError
 from packages.detection.rules import attack_path, cis, dora, iac, iam, network, shadow_it
 from packages.graph.client import Neo4jClient
 
@@ -21,18 +21,35 @@ class DetectionRunner:
         self.driver = Neo4jClient.get_driver()
 
     def run_all(self, tenant_id: str) -> list[Finding]:
+        """Tous les findings du tenant. Une détection dégradée est journalisée en ERREUR ; pour la connaître
+        (et l'afficher), utiliser `run_all_with_status`."""
+        return self.run_all_with_status(tenant_id)[0]
+
+    def run_all_with_status(self, tenant_id: str) -> tuple[list[Finding], list[str]]:
+        """(findings, erreurs). Une règle Cypher ou l'évaluation OPA qui échoue ne fait pas tomber les
+        autres, mais n'est JAMAIS silencieuse : elle apparaît dans la liste d'erreurs, sans donnée interne
+        (versions courtes, destinées à l'API). Un résultat sans erreur est un résultat complet."""
         findings: list[Finding] = []
+        errors: list[str] = []
         with self.driver.session() as session:
             for module in ALL_RULE_MODULES:
                 for rule_fn in module.RULES:
                     try:
                         findings.extend(rule_fn(session, tenant_id))
                     except Exception as e:
-                        logger.error("Rule %s failed: %s", rule_fn.__name__, e)
-        findings.extend(self.run_opa(tenant_id))
+                        logger.error(
+                            "tenant=%s règle %s en échec : %s", tenant_id, rule_fn.__name__, e
+                        )
+                        errors.append(f"règle {rule_fn.__name__} en échec")
+        try:
+            findings.extend(self.run_opa(tenant_id))
+        except OPAError as e:
+            logger.error("tenant=%s détection OPA dégradée : %s", tenant_id, e)
+            findings.extend(e.partial_findings)  # ce qu'OPA a produit avant l'échec n'est pas perdu
+            errors.append(f"OPA : {e.summary}")
         findings.extend(self.run_cloud_alerts(tenant_id, {f.rule_id for f in findings}))
         self._fill_confidence(tenant_id, findings)
-        return deduplicate(findings)
+        return deduplicate(findings), errors
 
     def _fill_confidence(self, tenant_id: str, findings: list[Finding]) -> None:
         """confidence_score d'un finding = min des confidences de ses nœuds."""

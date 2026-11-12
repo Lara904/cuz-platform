@@ -167,7 +167,12 @@ def test_stats_and_csv(monkeypatch):
     client = TestClient(_app(monkeypatch))
     h = _auth(Role.VIEWER)
     stats = client.get(_base("/stats"), headers=h).json()
-    assert stats == {"total": 4, "by_severity": {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 1}, "open": 4}
+    assert stats == {
+        "total": 4,
+        "by_severity": {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 1},
+        "open": 4,
+        "detection_errors": [],
+    }
     csv_resp = client.get(_base("/export/csv"), headers=h)
     assert csv_resp.headers["content-type"].startswith("text/csv")
     assert csv_resp.text.splitlines()[0].startswith("id,rule_id,severity")

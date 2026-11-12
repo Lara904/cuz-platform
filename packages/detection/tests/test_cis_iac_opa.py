@@ -4,7 +4,12 @@ import json
 import httpx
 import pytest
 
-from packages.detection.opa_client import POLICY_PACKAGES, OPAClient, _deny_items
+from packages.detection.opa_client import (
+    POLICY_PACKAGES,
+    OPAClient,
+    OPAUnavailableError,
+    _deny_items,
+)
 from packages.detection.rules import cis, iac
 from packages.detection.runner import DetectionRunner
 
@@ -42,6 +47,11 @@ def test_deny_items_accepts_object_set_and_list():
 
 def test_evaluate_nodes_maps_opa_results_to_findings():
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":  # OPA déjà à jour : mêmes policies que le dépôt
+            raw = OPAClient.expected_policies()
+            return httpx.Response(
+                200, json={"result": [{"id": i, "raw": t} for i, t in raw.items()]}
+            )
         body = json.loads(request.content)
         node = body["input"]["node"]
         if request.url.path == "/v1/data/cuz/iam/deny" and node["node_type"] == "USER":
@@ -55,7 +65,7 @@ def test_evaluate_nodes_maps_opa_results_to_findings():
                 "remediation_hint": "h",
             }
             return httpx.Response(200, json={"result": {json.dumps(obj, sort_keys=True): True}})
-        return httpx.Response(200, json={})
+        return httpx.Response(200, json={"result": {}})  # évalué, aucune violation
 
     nodes = [
         {
@@ -76,7 +86,9 @@ def test_evaluate_nodes_maps_opa_results_to_findings():
     assert f.tenant_id == TENANT
 
 
-def test_opa_unreachable_returns_no_findings_and_does_not_raise():
+def test_opa_unreachable_raises_instead_of_returning_no_findings():
+    """Défaillance silencieuse écartée : OPA injoignable n'est pas « aucune violation »."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("down", request=request)
 
@@ -92,7 +104,8 @@ def test_opa_unreachable_returns_no_findings_and_does_not_raise():
         }
     ]
     client = OPAClient(transport=httpx.MockTransport(handler))
-    assert client.evaluate_nodes(nodes) == []
+    with pytest.raises(OPAUnavailableError):
+        client.evaluate_nodes(nodes)
 
 
 def test_policy_packages_match_rego_files():

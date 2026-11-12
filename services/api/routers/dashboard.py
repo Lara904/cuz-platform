@@ -15,7 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from packages.graph.client import Neo4jClient
 from services.api import audit
 from services.api.middleware.auth import Role, TokenData, require_role, require_tenant_scope
-from services.api.routers.findings import _load
+from services.api.routers.findings import _load, detection_errors
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/dashboard",
@@ -93,6 +93,7 @@ async def dashboard_stats(tenant_id: str, _: TokenData = Depends(require_role(Ro
         "node_count": node_count,
         "by_severity": by_severity,
         "by_tier": by_tier,
+        "detection_errors": detection_errors(tenant_id),
         "open": sum(by_severity.values()),
         "health_score": health,
     }

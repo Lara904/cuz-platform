@@ -39,6 +39,8 @@ export interface DashboardStats {
   node_count: number;
   by_severity: Record<string, number>;
   by_tier?: Record<string, number>;
+  /** Erreurs du dernier calcul complet (OPA injoignable, règle en échec). Non vide = détection dégradée. */
+  detection_errors?: string[];
   open: number;
   health_score: number | null;
 }
