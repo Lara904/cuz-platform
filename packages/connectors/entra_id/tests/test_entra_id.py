@@ -18,11 +18,13 @@ def connector():
     )
 
 
+@pytest.mark.live_integration("entra_id")
 @pytest.mark.asyncio
 async def test_connection(connector):
     assert await connector.test_connection() is True
 
 
+@pytest.mark.live_integration("entra_id")
 @pytest.mark.asyncio
 async def test_pull_full_returns_users(connector):
     events = await connector.pull_full()
@@ -30,6 +32,7 @@ async def test_pull_full_returns_users(connector):
     assert len(users) >= 6, f"Attendu >=6 users, obtenu {len(users)}"
 
 
+@pytest.mark.live_integration("entra_id")
 @pytest.mark.asyncio
 async def test_djana_dev_no_mfa(connector):
     events = await connector.pull_full()
@@ -42,6 +45,7 @@ async def test_djana_dev_no_mfa(connector):
     assert djana.raw_data["record"]["has_mfa"] is False
 
 
+@pytest.mark.live_integration("entra_id")
 @pytest.mark.asyncio
 async def test_svc_pipeline_no_mfa(connector):
     events = await connector.pull_full()

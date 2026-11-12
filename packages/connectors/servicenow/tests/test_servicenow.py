@@ -44,6 +44,7 @@ def connector():
 # ── Tests d'intégration (instance réelle, auth OAuth) ─────────────────────────
 
 
+@pytest.mark.live_integration("servicenow")
 @pytest.mark.asyncio
 @skip_if_instance_5xx
 async def test_connection_returns_true(connector):
@@ -52,6 +53,7 @@ async def test_connection_returns_true(connector):
     assert result is True
 
 
+@pytest.mark.live_integration("servicenow")
 @pytest.mark.asyncio
 @skip_if_instance_5xx
 async def test_oauth_token_is_cached(connector):
@@ -62,6 +64,7 @@ async def test_oauth_token_is_cached(connector):
     assert connector._token_expiry is not None
 
 
+@pytest.mark.live_integration("servicenow")
 @pytest.mark.asyncio
 @skip_if_instance_5xx
 async def test_pull_full_returns_events(connector):
@@ -132,6 +135,7 @@ def test_mapper_service_without_vendor_type_stays_application():
     assert node.node_type == NodeType.APPLICATION
 
 
+@pytest.mark.live_integration("servicenow")
 @pytest.mark.asyncio
 @skip_if_instance_5xx
 async def test_pull_covers_all_6_tables(connector):

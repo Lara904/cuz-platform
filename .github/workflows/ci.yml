@@ -49,7 +49,9 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
-      - run: pytest packages/ services/ --ignore=packages/graph/tests/ -v --tb=short --cov=packages --cov=services --cov-report=xml
+      # live_integration : tests qui interrogent de vrais services (ServiceNow, Gitea, Entra ID, MinIO),
+      # injoignables depuis GitHub Actions ; ils tournent en local (cf. packages/connectors/conftest.py)
+      - run: pytest packages/ services/ --ignore=packages/graph/tests/ -m "not live_integration" -v --tb=short --cov=packages --cov=services --cov-report=xml
 
       - uses: actions/upload-artifact@v4
         with:

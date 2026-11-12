@@ -18,11 +18,13 @@ def connector():
     )
 
 
+@pytest.mark.live_integration("gitea")
 @pytest.mark.asyncio
 async def test_connection(connector):
     assert await connector.test_connection() is True
 
 
+@pytest.mark.live_integration("gitea")
 @pytest.mark.asyncio
 async def test_pull_full_returns_4_repos(connector):
     events = await connector.pull_full()
@@ -30,6 +32,7 @@ async def test_pull_full_returns_4_repos(connector):
     assert len(repos) == 4, f"Attendu 4 repos, obtenu {len(repos)}"
 
 
+@pytest.mark.live_integration("gitea")
 @pytest.mark.asyncio
 async def test_backend_repo_has_qs_dependency(connector):
     events = await connector.pull_full()

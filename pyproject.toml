@@ -35,6 +35,9 @@ ignore_missing_imports = true
 testpaths = ['tests', 'packages', 'services']
 addopts = '-v --tb=short'
 asyncio_mode = 'auto'
+markers = [
+    'live_integration(service): interroge un vrai service (ServiceNow, Gitea, Entra ID, MinIO) ; ignoré si injoignable, exclu de la CI GitHub Actions',
+]
 
 [[tool.mypy.overrides]]
 module = [

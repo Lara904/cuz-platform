@@ -19,11 +19,13 @@ def connector():
     )
 
 
+@pytest.mark.live_integration("minio")
 @pytest.mark.asyncio
 async def test_connection(connector):
     assert await connector.test_connection() is True
 
 
+@pytest.mark.live_integration("minio")
 @pytest.mark.asyncio
 async def test_pull_full_returns_3_buckets(connector):
     events = await connector.pull_full()
@@ -33,6 +35,7 @@ async def test_pull_full_returns_3_buckets(connector):
     assert "acmecorp-public" in bucket_names
 
 
+@pytest.mark.live_integration("minio")
 @pytest.mark.asyncio
 async def test_acmecorp_public_is_flagged(connector):
     events = await connector.pull_full()
@@ -40,6 +43,7 @@ async def test_acmecorp_public_is_flagged(connector):
     assert pub.raw_data["is_public"] is True
 
 
+@pytest.mark.live_integration("minio")
 @pytest.mark.asyncio
 async def test_clients_pii_csv_detected(connector):
     events = await connector.pull_full()
