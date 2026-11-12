@@ -16,8 +16,24 @@ from packages.entity_resolution.probabilistic_resolver import (
 )
 from packages.entity_resolution.splink_settings import prior_match_probability
 
-WORDS = ["payroll", "billing", "ledger", "invoice", "treasury", "audit", "orders", "catalog",
-         "shipping", "pricing", "loyalty", "refund", "tax", "reporting", "scheduler", "gateway"]
+WORDS = [
+    "payroll",
+    "billing",
+    "ledger",
+    "invoice",
+    "treasury",
+    "audit",
+    "orders",
+    "catalog",
+    "shipping",
+    "pricing",
+    "loyalty",
+    "refund",
+    "tax",
+    "reporting",
+    "scheduler",
+    "gateway",
+]
 
 
 def synthetic_graph(seed: int = 7) -> tuple[pd.DataFrame, dict[str, set[frozenset]]]:
@@ -28,14 +44,28 @@ def synthetic_graph(seed: int = 7) -> tuple[pd.DataFrame, dict[str, set[frozense
     - uniform : pas d'IP, nom d'un schéma uniforme (srv-prod-NNN) : le nom ne discrimine pas."""
     rnd = random.Random(seed)
     rows: list[dict] = []
-    truth: dict[str, set[frozenset]] = {"both": set(), "ip": set(), "distinctive": set(), "uniform": set()}
+    truth: dict[str, set[frozenset]] = {
+        "both": set(),
+        "ip": set(),
+        "distinctive": set(),
+        "uniform": set(),
+    }
 
     def add(uid, node_type, name, ip, source):
-        rows.append({"unique_id": uid, "node_type": node_type, "name": normalize_name(name),
-                     "ip_address": ip, "source": source})
+        rows.append(
+            {
+                "unique_id": uid,
+                "node_type": node_type,
+                "name": normalize_name(name),
+                "ip_address": ip,
+                "source": source,
+            }
+        )
 
     for i in range(200):
-        add(f"sn:{i}", "SERVER", f"srv-prod-{i:03d}", f"10.0.{i // 250}.{i % 250 + 1}", "servicenow")
+        add(
+            f"sn:{i}", "SERVER", f"srv-prod-{i:03d}", f"10.0.{i // 250}.{i % 250 + 1}", "servicenow"
+        )
     for k, i in enumerate(rnd.sample(range(200), 36)):
         kind = ("both", "ip", "uniform")[k // 12]
         ip = f"10.0.{i // 250}.{i % 250 + 1}" if kind in ("both", "ip") else None
@@ -71,8 +101,13 @@ def test_measure_duplicate_rate():
 
 
 def test_classify_splits_by_threshold():
-    df = pd.DataFrame({"unique_id_l": ["a", "b", "c"], "unique_id_r": ["a2", "b2", "c2"],
-                       "match_probability": [0.95, 0.75, 0.30]})
+    df = pd.DataFrame(
+        {
+            "unique_id_l": ["a", "b", "c"],
+            "unique_id_r": ["a2", "b2", "c2"],
+            "match_probability": [0.95, 0.75, 0.30],
+        }
+    )
     result = ProbabilisticResolver.classify(df)
     assert len(result["auto_merge"]) == 1
     assert len(result["needs_human_review"]) == 1
@@ -106,7 +141,9 @@ def test_single_evidence_duplicates_are_never_auto_merged(trained):
 
 def test_terraform_nodes_are_never_candidates():
     df, _ = synthetic_graph()
-    df.loc[df["source"] == "azure", "source"] = "terraform"  # IaC vs réel : doivent rester distincts
+    df.loc[df["source"] == "azure", "source"] = (
+        "terraform"  # IaC vs réel : doivent rester distincts
+    )
     resolver = ProbabilisticResolver("synthetic")
     resolver.train(df)
     assert resolver.predict_candidate_pairs(df).empty
@@ -138,8 +175,12 @@ def test_model_roundtrip_without_retraining(trained, tmp_path):
     reloaded = ProbabilisticResolver("synthetic")
     reloaded.load_model(df, path)
     again = reloaded.classify(reloaded.predict_candidate_pairs(df))
-    assert {frozenset(p) for p in zip(again["auto_merge"]["unique_id_l"],
-                                      again["auto_merge"]["unique_id_r"], strict=True)} == found["auto_merge"]
+    assert {
+        frozenset(p)
+        for p in zip(
+            again["auto_merge"]["unique_id_l"], again["auto_merge"]["unique_id_r"], strict=True
+        )
+    } == found["auto_merge"]
 
 
 def test_compute_stats_shape(trained):
@@ -151,9 +192,16 @@ def test_compute_stats_shape(trained):
 
 
 def test_nodes_to_dataframe_uses_first_source_and_ip():
-    node = CuzNode(tenant_id="t", node_type=NodeType.SERVER, name=" SRV-01 ", confidence_score=0.9,
-                   freshness_score=1.0, sources=["servicenow", "azure"], last_seen=datetime.now(UTC),
-                   attributes={"ip_address": "10.0.0.1"})
+    node = CuzNode(
+        tenant_id="t",
+        node_type=NodeType.SERVER,
+        name=" SRV-01 ",
+        confidence_score=0.9,
+        freshness_score=1.0,
+        sources=["servicenow", "azure"],
+        last_seen=datetime.now(UTC),
+        attributes={"ip_address": "10.0.0.1"},
+    )
     row = nodes_to_dataframe([node]).iloc[0]
     assert (row["name"], row["ip_address"], row["source"]) == ("srv01", "10.0.0.1", "servicenow")
 
@@ -174,8 +222,14 @@ def _model(m_name=(0.45, 0.35, 0.15, 0.05)):
 
 
 def test_recalibrate_m_blends_observed_and_expert_values():
-    model = recalibrate_m(_model(), {"name": {3: 30, 2: 10}}, strength=20)  # 40 paires : 75 % exact, 25 % JW.9
-    m = [lv["m_probability"] for lv in model["comparisons"][0]["comparison_levels"] if not lv.get("is_null_level")]
+    model = recalibrate_m(
+        _model(), {"name": {3: 30, 2: 10}}, strength=20
+    )  # 40 paires : 75 % exact, 25 % JW.9
+    m = [
+        lv["m_probability"]
+        for lv in model["comparisons"][0]["comparison_levels"]
+        if not lv.get("is_null_level")
+    ]
     assert m[0] == pytest.approx((30 + 20 * 0.45) / 60)  # gamma 3 : exact
     assert m[3] == pytest.approx((0 + 20 * 0.05) / 60)
     assert m[3] > 0  # niveau jamais observé : jamais ramené à 0

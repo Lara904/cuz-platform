@@ -95,10 +95,15 @@ def restore_httpx():
 @pytest.mark.asyncio
 async def test_webhook_is_registered_with_secret(monkeypatch, restore_httpx):
     monkeypatch.setenv("GITEA_WEBHOOK_SECRET", "s3cret")
-    conn, seen = _mock_connector(lambda r: httpx.Response(200, json=[]) if r.method == "GET"
-                                 else httpx.Response(201, json={}))
+    conn, seen = _mock_connector(
+        lambda r: (
+            httpx.Response(200, json=[]) if r.method == "GET" else httpx.Response(201, json={})
+        )
+    )
     async with httpx.AsyncClient() as client:
-        assert await conn._register_webhook(client, "acmecorp", "backend", "http://cuz/hook") is True
+        assert (
+            await conn._register_webhook(client, "acmecorp", "backend", "http://cuz/hook") is True
+        )
     post = next(r for r in seen if r.method == "POST")
     body = __import__("json").loads(post.content)
     assert body["config"]["secret"] == "s3cret" and "push" in body["events"]
@@ -110,7 +115,9 @@ async def test_existing_webhook_is_patched_to_carry_the_secret(monkeypatch, rest
     hooks = [{"id": 7, "config": {"url": "http://cuz/hook"}}]
     conn, seen = _mock_connector(lambda r: httpx.Response(200, json=hooks))
     async with httpx.AsyncClient() as client:
-        assert await conn._register_webhook(client, "acmecorp", "backend", "http://cuz/hook") is True
+        assert (
+            await conn._register_webhook(client, "acmecorp", "backend", "http://cuz/hook") is True
+        )
     patch = next(r for r in seen if r.method == "PATCH")
     assert patch.url.path.endswith("/hooks/7")
     assert __import__("json").loads(patch.content)["config"]["secret"] == "s3cret"
@@ -120,8 +127,16 @@ async def test_existing_webhook_is_patched_to_carry_the_secret(monkeypatch, rest
 async def test_pull_repo_returns_repository_event_or_none(restore_httpx):
     def handler(r: httpx.Request) -> httpx.Response:
         if r.url.path == "/api/v1/repos/acmecorp/backend":
-            return httpx.Response(200, json={"id": 1, "name": "backend", "full_name": "acmecorp/backend",
-                                             "owner": {"login": "acmecorp"}, "default_branch": "main"})
+            return httpx.Response(
+                200,
+                json={
+                    "id": 1,
+                    "name": "backend",
+                    "full_name": "acmecorp/backend",
+                    "owner": {"login": "acmecorp"},
+                    "default_branch": "main",
+                },
+            )
         if r.url.path.endswith("/raw/package.json"):
             return httpx.Response(200, text='{"dependencies": {"qs": "6.5.2"}}')
         return httpx.Response(404)

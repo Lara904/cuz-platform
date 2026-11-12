@@ -7,6 +7,7 @@ Graphe du tenant pour la vue interactive (P1.12).
 Les nœuds portent confidence_score et freshness_score (règle 2). Les chemins d'attaque
 sont signalés par les findings ouverts : ATTACK-PATH-001-PARTIAL en Phase 1.
 """
+
 import json
 
 from fastapi import APIRouter, Depends
@@ -57,8 +58,13 @@ async def tenant_graph(tenant_id: str, _: TokenData = Depends(require_role(Role.
     nodes, edges = await run_in_threadpool(_query, tenant_id)
     findings = await run_in_threadpool(_load, tenant_id)
     open_findings = [
-        {"id": f.id, "rule_id": f.rule_id, "severity": f.severity,
-         "affected_nodes": f.affected_nodes}
-        for f in findings if f.status == "open"
+        {
+            "id": f.id,
+            "rule_id": f.rule_id,
+            "severity": f.severity,
+            "affected_nodes": f.affected_nodes,
+        }
+        for f in findings
+        if f.status == "open"
     ]
     return {"nodes": nodes, "edges": edges, "findings": open_findings}

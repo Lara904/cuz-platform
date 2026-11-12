@@ -17,7 +17,8 @@ def test_affects_when_image_names_the_declaring_repo():
     pod = GraphNode("p-legacy", "legacy-job", "CONTAINER", {"images": ["acmecorp/backend:latest"]})
     edges = correlate([pod], [repo], {"v-qs": vuln}, [], T)
     assert [(e.edge_type, e.source_id, e.target_id) for e in edges] == [
-        (EdgeType.AFFECTS, "v-qs", "p-legacy")]
+        (EdgeType.AFFECTS, "v-qs", "p-legacy")
+    ]
 
 
 def test_no_affects_for_unrelated_image():
@@ -33,4 +34,5 @@ def test_exposes_only_for_publicly_exposed_pods():
     hidden = GraphNode("p-hid", "other", "CONTAINER", {"is_public_exposed": False})
     edges = correlate([exposed, hidden], [], {}, [bucket], T)
     assert [(e.edge_type, e.source_id, e.target_id) for e in edges] == [
-        (EdgeType.EXPOSES, "p-exp", "s-public")]
+        (EdgeType.EXPOSES, "p-exp", "s-public")
+    ]

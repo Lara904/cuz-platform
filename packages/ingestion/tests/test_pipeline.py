@@ -127,9 +127,16 @@ def test_gitea_repo_with_n_deps_produces_1_plus_2n():
 
 def test_node_id_is_stable_across_runs():
     """Même repo, deux normalisations (deux exécutions) → même id de nœud."""
-    raw_data = {"object_type": "repository", "repo_id": "7", "name": "backend",
-                "full_name": "acmecorp/backend", "owner": "acmecorp", "private": True,
-                "default_branch": "main", "dependencies": []}
+    raw_data = {
+        "object_type": "repository",
+        "repo_id": "7",
+        "name": "backend",
+        "full_name": "acmecorp/backend",
+        "owner": "acmecorp",
+        "private": True,
+        "default_branch": "main",
+        "dependencies": [],
+    }
     first = Normalizer().normalize(make_raw("gitea", raw_data))[0].node.id
     second = Normalizer().normalize(make_raw("gitea", raw_data))[0].node.id
     assert first == second == "gitea:7"

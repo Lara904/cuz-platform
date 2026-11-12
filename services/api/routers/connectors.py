@@ -11,6 +11,7 @@ Endpoints :
   DELETE /api/v1/tenants/{tenant_id}/connectors/{id}         → Supprimer
   POST   /api/v1/tenants/{tenant_id}/connectors/{id}/test    → Tester la connexion
 """
+
 import os
 import uuid
 from datetime import UTC, datetime
@@ -100,6 +101,7 @@ async def create_connector(
     connector_id = str(uuid.uuid4())
     now = datetime.now(UTC)
     import json
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -107,8 +109,12 @@ async def create_connector(
             VALUES ($1, $2, $3, $4, $5::jsonb, 'pending', $6)
             RETURNING *
             """,
-            connector_id, tenant_id, payload.type.value, payload.name,
-            json.dumps(payload.config), now,
+            connector_id,
+            tenant_id,
+            payload.type.value,
+            payload.name,
+            json.dumps(payload.config),
+            now,
         )
     return row_to_connector(row)
 

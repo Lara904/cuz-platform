@@ -43,7 +43,8 @@ class DetectionRunner:
             rows = session.run(
                 "MATCH (n:CuzNode {tenant_id: $t}) WHERE n.id IN $ids "
                 "RETURN n.id AS id, n.confidence_score AS c",
-                t=tenant_id, ids=ids,
+                t=tenant_id,
+                ids=ids,
             ).data()
         confidence = {r["id"]: r["c"] for r in rows if r["c"] is not None}
         for finding in findings:
@@ -67,16 +68,20 @@ class DetectionRunner:
         findings: list[Finding] = []
         for alert in kept:
             severity = alert.attributes.get("severity")
-            findings.append(Finding(
-                tenant_id=tenant_id,
-                rule_id=alert.attributes.get("rule_id") or "CLOUD-ALERT",
-                severity=severity if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO") else "MEDIUM",
-                title=alert.name,
-                description=alert.attributes.get("description") or alert.name,
-                affected_nodes=[alert.id],
-                affected_node_names=[alert.name],
-                remediation_hint="Voir l'alerte dans Defender for Cloud (source : cloud_detection).",
-            ))
+            findings.append(
+                Finding(
+                    tenant_id=tenant_id,
+                    rule_id=alert.attributes.get("rule_id") or "CLOUD-ALERT",
+                    severity=severity
+                    if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
+                    else "MEDIUM",
+                    title=alert.name,
+                    description=alert.attributes.get("description") or alert.name,
+                    affected_nodes=[alert.id],
+                    affected_node_names=[alert.name],
+                    remediation_hint="Voir l'alerte dans Defender for Cloud (source : cloud_detection).",
+                )
+            )
         return findings
 
     def run_opa(self, tenant_id: str) -> list[Finding]:
@@ -89,15 +94,18 @@ class DetectionRunner:
                 "n.tags AS tags, n.owner AS owner",
                 t=tenant_id,
             ).data()
-        nodes = [{
-            "id": r["id"],
-            "tenant_id": r["tenant_id"],
-            "name": r["name"],
-            "node_type": r["node_type"],
-            "attributes": _load_json(r["attributes"]),
-            "tags": _load_json(r["tags"]),
-            "owner": r["owner"],
-        } for r in rows]
+        nodes = [
+            {
+                "id": r["id"],
+                "tenant_id": r["tenant_id"],
+                "name": r["name"],
+                "node_type": r["node_type"],
+                "attributes": _load_json(r["attributes"]),
+                "tags": _load_json(r["tags"]),
+                "owner": r["owner"],
+            }
+            for r in rows
+        ]
         return OPAClient().evaluate_nodes(nodes)
 
 

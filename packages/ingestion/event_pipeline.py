@@ -17,6 +17,7 @@ scripts/measure_ingest_latency.py.
 
 Usage : python -m packages.ingestion.event_pipeline --tenant acmecorp
 """
+
 import argparse
 import asyncio
 import logging
@@ -34,8 +35,13 @@ EVENT_SOURCES = ("kubernetes", "cloud_detection")  # gitea : webhook
 
 
 class EventPipeline:
-    def __init__(self, connectors: dict, producer: EventProducer | None = None,
-                 backoff_seconds: float = 5.0, max_backoff_seconds: float = 60.0):
+    def __init__(
+        self,
+        connectors: dict,
+        producer: EventProducer | None = None,
+        backoff_seconds: float = 5.0,
+        max_backoff_seconds: float = 60.0,
+    ):
         """connectors : {"kubernetes": KubernetesConnector(...), "cloud_detection": ...}"""
         self.connectors = connectors
         self.producer = producer or EventProducer()
@@ -54,8 +60,12 @@ class EventPipeline:
         self.producer.publish(raw_event)
         self._latencies[name].append((datetime.now(UTC) - raw_event.timestamp).total_seconds())
         self.published[name] += 1
-        logger.info("event_pipeline: %s -> cuz.raw.%s event=%s", name, raw_event.tenant_id,
-                    raw_event.event_id)
+        logger.info(
+            "event_pipeline: %s -> cuz.raw.%s event=%s",
+            name,
+            raw_event.tenant_id,
+            raw_event.event_id,
+        )
 
     async def _supervise(self, name: str, connector) -> None:
         backoff = self.backoff_seconds
@@ -68,13 +78,17 @@ class EventPipeline:
                 raise
             except Exception as e:
                 self.restarts[name] += 1
-                logger.error("event_pipeline: flux %s en erreur (%s), relance dans %.1fs", name, e, backoff)
+                logger.error(
+                    "event_pipeline: flux %s en erreur (%s), relance dans %.1fs", name, e, backoff
+                )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, self.max_backoff_seconds)
 
     async def run(self) -> None:
-        tasks = [asyncio.create_task(self._supervise(name, conn), name=f"stream-{name}")
-                 for name, conn in self.connectors.items()]
+        tasks = [
+            asyncio.create_task(self._supervise(name, conn), name=f"stream-{name}")
+            for name, conn in self.connectors.items()
+        ]
         try:
             await asyncio.gather(*tasks)
         finally:
@@ -85,8 +99,11 @@ class EventPipeline:
 
     def measure_p95_latency(self, name: str | None = None) -> float:
         """P95 (rang inférieur) du délai connecteur -> bus, pour un flux ou pour tous."""
-        samples = sorted(self._latencies[name] if name else
-                         [v for values in self._latencies.values() for v in values])
+        samples = sorted(
+            self._latencies[name]
+            if name
+            else [v for values in self._latencies.values() for v in values]
+        )
         if not samples:
             return 0.0
         return samples[max(math.ceil(0.95 * len(samples)) - 1, 0)]
@@ -110,7 +127,9 @@ def main() -> int:
         logger.error("aucun connecteur temps réel actif (%s)", ", ".join(EVENT_SOURCES))
         return 1
     logger.info("flux temps réel : %s", ", ".join(connectors))
-    pipeline = EventPipeline(connectors, EventProducer(os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092")))
+    pipeline = EventPipeline(
+        connectors, EventProducer(os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"))
+    )
     try:
         asyncio.run(pipeline.run())
     except KeyboardInterrupt:

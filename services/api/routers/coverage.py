@@ -7,6 +7,7 @@ Couverture CMDB (P1.18).
 cmdb_coverage_pct = part des nœuds vus par une source ET déclarés en CMDB (ServiceNow).
 Ce n'est PAS un taux d'inconnu total : l'inconnu n'est pas mesurable.
 """
+
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 

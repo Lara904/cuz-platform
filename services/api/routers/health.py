@@ -3,6 +3,7 @@ services/api/routers/health.py
 Health check endpoint — pas d'auth requise.
 Retourne 200 si l'API tourne, indépendamment des services externes.
 """
+
 from datetime import UTC, datetime
 
 from fastapi import APIRouter

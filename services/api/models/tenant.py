@@ -2,6 +2,7 @@
 services/api/models/tenant.py
 Schémas Pydantic pour la gestion des tenants.
 """
+
 from datetime import datetime
 from enum import Enum
 

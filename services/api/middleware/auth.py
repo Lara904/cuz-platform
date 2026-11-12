@@ -13,6 +13,7 @@ En dev, un mock auth accepte username/password et génère un JWT signé avec
 JWT_SECRET_KEY (défini dans .env). En prod, la validation se fait contre
 Azure AD / OIDC externe.
 """
+
 import os
 from datetime import UTC, datetime, timedelta
 from enum import Enum

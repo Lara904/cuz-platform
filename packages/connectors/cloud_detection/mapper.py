@@ -30,22 +30,32 @@ class CloudDetectionMapper:
     def map_alert(self, rec: dict) -> CuzNode:
         """Une alerte cloud est un VULNERABILITY avec node_subtype='cloud_alert' (tag natif
         filtrable). Ajouter un NodeType ALERT ne se justifie qu'au volume d'un futur client."""
-        return _node(self.tenant_id, rec, rec.get("alert_name", rec.get("id", "unknown")),
-                     "cloud_alert", {
-                         "severity": rec.get("severity"),
-                         "rule_id": rec.get("rule_id"),
-                         "resource_id": rec.get("resource_id"),
-                         "status": rec.get("status"),
-                         "description": rec.get("description"),
-                     })
+        return _node(
+            self.tenant_id,
+            rec,
+            rec.get("alert_name", rec.get("id", "unknown")),
+            "cloud_alert",
+            {
+                "severity": rec.get("severity"),
+                "rule_id": rec.get("rule_id"),
+                "resource_id": rec.get("resource_id"),
+                "status": rec.get("status"),
+                "description": rec.get("description"),
+            },
+        )
 
     def map_recommendation(self, rec: dict) -> CuzNode:
-        return _node(self.tenant_id, rec, rec.get("recommendation_name", rec.get("id", "unknown")),
-                     "recommendation", {
-                         "rule_id": rec.get("rule_id"),
-                         "resource_id": rec.get("resource_id"),
-                         "remediation_hint": rec.get("remediation"),
-                     })
+        return _node(
+            self.tenant_id,
+            rec,
+            rec.get("recommendation_name", rec.get("id", "unknown")),
+            "recommendation",
+            {
+                "rule_id": rec.get("rule_id"),
+                "resource_id": rec.get("resource_id"),
+                "remediation_hint": rec.get("remediation"),
+            },
+        )
 
 
 def deduplicate_against_cypher_findings(cloud_nodes: list, cypher_rule_ids: set) -> list:

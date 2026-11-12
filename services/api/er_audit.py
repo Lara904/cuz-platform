@@ -7,6 +7,7 @@ refuse UPDATE, DELETE et TRUNCATE. Une paire peut recevoir plusieurs décisions 
 la DERNIÈRE fait foi, l'historique reste. Ces lignes alimentent le réentraînement du modèle Splink.
 Une écriture qui échoue doit faire échouer l'action : pas de décision sans trace.
 """
+
 import hashlib
 from dataclasses import dataclass
 
@@ -86,8 +87,14 @@ async def record(d: Decision) -> None:
             """INSERT INTO er_decisions (tenant_id, pair_id, node_a_id, node_b_id,
                                          match_probability, decision, reviewer, note)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-            d.tenant_id, d.pair_id, d.node_a_id, d.node_b_id, d.match_probability,
-            d.decision, d.reviewer, d.note,
+            d.tenant_id,
+            d.pair_id,
+            d.node_a_id,
+            d.node_b_id,
+            d.match_probability,
+            d.decision,
+            d.reviewer,
+            d.note,
         )
 
 
@@ -104,11 +111,17 @@ async def stats(tenant_id: str) -> dict[str, int]:
     latest = await latest_decisions(tenant_id)
     pool = await get_pool()
     async with pool.acquire() as conn:
-        total = await conn.fetchval("SELECT count(*) FROM er_decisions WHERE tenant_id = $1",
-                                    tenant_id)
+        total = await conn.fetchval(
+            "SELECT count(*) FROM er_decisions WHERE tenant_id = $1", tenant_id
+        )
     count = lambda kind: sum(1 for d in latest.values() if d["decision"] == kind)  # noqa: E731
-    return {"total_reviewed": len(latest), "total_decisions": int(total),
-            "merged": count("merge"), "rejected": count("reject"), "flagged": count("flag")}
+    return {
+        "total_reviewed": len(latest),
+        "total_decisions": int(total),
+        "merged": count("merge"),
+        "rejected": count("reject"),
+        "flagged": count("flag"),
+    }
 
 
 async def merged_pairs(tenant_id: str) -> list[tuple[str, str]]:

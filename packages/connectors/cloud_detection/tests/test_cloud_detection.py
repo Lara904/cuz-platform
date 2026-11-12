@@ -22,8 +22,14 @@ SIM_URL = os.getenv("CLOUD_DETECTION_SIM_URL", "http://localhost:9100")
 
 def test_mapper_alert():
     mapper = CloudDetectionMapper(TENANT)
-    rec = {"id": "alert-001", "alert_name": "Port SSH exposé", "severity": "HIGH",
-           "rule_id": "NET-001", "resource_id": "vm-prod-01", "status": "active"}
+    rec = {
+        "id": "alert-001",
+        "alert_name": "Port SSH exposé",
+        "severity": "HIGH",
+        "rule_id": "NET-001",
+        "resource_id": "vm-prod-01",
+        "status": "active",
+    }
     node = mapper.map_alert(rec)
     assert node.node_type == NodeType.VULNERABILITY
     assert node.attributes["severity"] == "HIGH"
@@ -48,17 +54,22 @@ def test_deduplicate_removes_known_rule_ids():
 
 
 def _sim_transport() -> httpx.MockTransport:
-    alerts = [{"id": "a1", "alert_name": "x", "rule_id": "IAM-001", "severity": "HIGH"},
-              {"id": "a2", "alert_name": "y", "rule_id": "STORAGE-PUBLIC-001", "severity": "HIGH"}]
+    alerts = [
+        {"id": "a1", "alert_name": "x", "rule_id": "IAM-001", "severity": "HIGH"},
+        {"id": "a2", "alert_name": "y", "rule_id": "STORAGE-PUBLIC-001", "severity": "HIGH"},
+    ]
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/alerts":
             return httpx.Response(200, json={"alerts": alerts})
         if request.url.path == "/recommendations":
-            return httpx.Response(200, json={"recommendations": [{"id": "r1", "rule_id": "IAM-001"}]})
+            return httpx.Response(
+                200, json={"recommendations": [{"id": "r1", "rule_id": "IAM-001"}]}
+            )
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "ok"})
         return httpx.Response(404)
+
     return httpx.MockTransport(handler)
 
 
@@ -75,9 +86,14 @@ def test_test_connection_uses_health_endpoint():
 
 
 def test_normalizer_yields_vulnerability_node_with_stable_id():
-    raw = RawEvent(event_id="e1", tenant_id=TENANT, source="cloud_detection",
-                   event_type=EventType.NODE_CREATED, timestamp=datetime.now(UTC),
-                   raw_data={"object_type": "alert", "record": {"id": "a1", "alert_name": "x"}})
+    raw = RawEvent(
+        event_id="e1",
+        tenant_id=TENANT,
+        source="cloud_detection",
+        event_type=EventType.NODE_CREATED,
+        timestamp=datetime.now(UTC),
+        raw_data={"object_type": "alert", "record": {"id": "a1", "alert_name": "x"}},
+    )
     results = Normalizer().normalize(raw)
     assert len(results) == 1
     assert results[0].node.node_type == NodeType.VULNERABILITY
@@ -89,6 +105,7 @@ def test_live_simulator_serves_alerts():
     async def probe():
         async with httpx.AsyncClient(timeout=5) as client:
             return (await client.get(f"{SIM_URL}/health")).status_code
+
     try:
         status = asyncio.run(probe())
     except httpx.HTTPError:

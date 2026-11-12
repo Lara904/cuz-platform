@@ -8,6 +8,7 @@ directe dans Neo4j (règle 1). La résolution des assets lit le graphe.
 
 Usage : python -m packages.loaders.business_process_loader --csv tests/fixtures/acmecorp_business_processes.csv --tenant acmecorp
 """
+
 import argparse
 import csv
 import logging
@@ -68,7 +69,9 @@ class BusinessProcessLoader:
             sources=["manual"],
         )
 
-    def build_events(self, path: str, resolve: AssetResolver) -> tuple[list[NormalizedEvent], list[str]]:
+    def build_events(
+        self, path: str, resolve: AssetResolver
+    ) -> tuple[list[NormalizedEvent], list[str]]:
         """Événements à publier (nœud + arête par ligne résolue) et liste des lignes non résolues."""
         events: list[NormalizedEvent] = []
         unresolved: list[str] = []
@@ -79,9 +82,14 @@ class BusinessProcessLoader:
                 unresolved.append(f"{process.name} → {asset_ref}")
                 logger.warning("asset non résolu pour '%s' : %s", process.name, asset_ref)
                 continue
-            base = dict(event_id=str(uuid.uuid4()), raw_event_id="business-process-csv",
-                        tenant_id=self.tenant_id, source="manual",
-                        event_type=EventType.NODE_CREATED, timestamp=now)
+            base = dict(
+                event_id=str(uuid.uuid4()),
+                raw_event_id="business-process-csv",
+                tenant_id=self.tenant_id,
+                source="manual",
+                event_type=EventType.NODE_CREATED,
+                timestamp=now,
+            )
             events.append(NormalizedEvent(node=process, **base))
             events.append(NormalizedEvent(edge=self.make_supports_edge(process, asset_id), **base))
         return events, unresolved
@@ -89,18 +97,21 @@ class BusinessProcessLoader:
 
 def graph_resolver(session, tenant_id: str) -> AssetResolver:
     """Résolution par external_id, puis par nom si le nom est unique dans le tenant."""
+
     def resolve(ref: str) -> str | None:
         rows = session.run(
             """MATCH (n:CuzNode {tenant_id: $t})
                WHERE n.external_id = $ref OR n.name = $ref
                RETURN n.id AS id, n.external_id = $ref AS by_ext""",
-            t=tenant_id, ref=ref,
+            t=tenant_id,
+            ref=ref,
         ).data()
         by_ext = [r["id"] for r in rows if r["by_ext"]]
         if len(by_ext) == 1:
             return by_ext[0]
         by_name = [r["id"] for r in rows]
         return by_name[0] if len(by_name) == 1 else None
+
     return resolve
 
 
@@ -122,11 +133,18 @@ def main() -> int:
         events, unresolved = loader.build_events(args.csv, graph_resolver(session, args.tenant))
     producer = EventProducer()
     for event in events:
-        producer.producer.produce(topic=f"cuz.normalized.{args.tenant}", key=event.event_id.encode(),
-                                  value=event.model_dump_json().encode())
+        producer.producer.produce(
+            topic=f"cuz.normalized.{args.tenant}",
+            key=event.event_id.encode(),
+            value=event.model_dump_json().encode(),
+        )
     producer.flush()
-    logger.info("business processes : %d événements publiés, %d lien(s) non résolu(s) %s",
-                len(events), len(unresolved), unresolved)
+    logger.info(
+        "business processes : %d événements publiés, %d lien(s) non résolu(s) %s",
+        len(events),
+        len(unresolved),
+        unresolved,
+    )
     return 0
 
 

@@ -8,6 +8,7 @@ Source : nœuds THIRD_PARTY et leurs arêtes SUPPORTS. Une arête SUPPORTS vers 
 BusinessFunction arrive avec P1.16 ; d'ici là la colonne supported_function est vide
 si aucune arête SUPPORTS n'a été produite. exit_plan_status est lu en propriété native.
 """
+
 import csv
 import io
 import json
@@ -35,8 +36,17 @@ RETURN tp.name AS provider_name,
 ORDER BY provider_name
 """
 
-FIELDNAMES = ["provider_name", "provider_type", "country", "criticality", "exit_plan_status",
-              "supported_function", "contract_end_date", "substitutability", "concentration_risk"]
+FIELDNAMES = [
+    "provider_name",
+    "provider_type",
+    "country",
+    "criticality",
+    "exit_plan_status",
+    "supported_function",
+    "contract_end_date",
+    "substitutability",
+    "concentration_risk",
+]
 
 
 def _load_json(raw: str | None) -> dict:
@@ -55,17 +65,19 @@ def _rows(tenant_id: str) -> list[dict]:
         attrs = _load_json(rec["provider_attrs"])
         functions = [f for f in rec["supported_functions"] if f] or [""]
         for function in functions:  # un prestataire peut soutenir plusieurs fonctions
-            rows.append({
-                "provider_name": rec["provider_name"],
-                "provider_type": attrs.get("provider_type", ""),
-                "country": attrs.get("country", ""),
-                "criticality": attrs.get("criticality", ""),
-                "exit_plan_status": rec["exit_plan_status"] or "NOT_SET",
-                "supported_function": function,
-                "contract_end_date": attrs.get("contract_end_date", ""),
-                "substitutability": attrs.get("substitutability", ""),
-                "concentration_risk": attrs.get("concentration_risk", ""),
-            })
+            rows.append(
+                {
+                    "provider_name": rec["provider_name"],
+                    "provider_type": attrs.get("provider_type", ""),
+                    "country": attrs.get("country", ""),
+                    "criticality": attrs.get("criticality", ""),
+                    "exit_plan_status": rec["exit_plan_status"] or "NOT_SET",
+                    "supported_function": function,
+                    "contract_end_date": attrs.get("contract_end_date", ""),
+                    "substitutability": attrs.get("substitutability", ""),
+                    "concentration_risk": attrs.get("concentration_risk", ""),
+                }
+            )
     return rows
 
 

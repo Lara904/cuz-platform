@@ -14,6 +14,7 @@ En P0, le stockage est PostgreSQL via SQLAlchemy async.
 Le provisioning automatique (contrainte Neo4j, topic Kafka) est prévu
 mais implémenté en stub pour P0.8 — il sera complété en P1.
 """
+
 import os
 from datetime import UTC, datetime
 
@@ -80,6 +81,7 @@ async def _provision_tenant(tenant_id: str):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/", response_model=list[TenantResponse])
 async def list_tenants(
     current_user: TokenData = Depends(require_role(Role.TENANT_ADMIN)),
@@ -118,7 +120,10 @@ async def create_tenant(
             VALUES ($1, $2, $3, 'active', $4, $4)
             RETURNING *
             """,
-            payload.id, payload.name, payload.description, now,
+            payload.id,
+            payload.name,
+            payload.description,
+            now,
         )
 
     await _provision_tenant(payload.id)
@@ -143,7 +148,9 @@ async def get_tenant(
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant '{tenant_id}' introuvable.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant '{tenant_id}' introuvable."
+        )
     return row_to_tenant(row)
 
 
@@ -169,9 +176,11 @@ async def update_tenant(
         updates["status"] = payload.status.value
 
     if not updates:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Aucun champ à mettre à jour.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Aucun champ à mettre à jour."
+        )
 
-    set_clause = ", ".join(f"{k} = ${i+2}" for i, k in enumerate(updates.keys()))
+    set_clause = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates.keys()))
     values = [tenant_id] + list(updates.values()) + [now]
     query = f"""
         UPDATE tenants
@@ -183,7 +192,9 @@ async def update_tenant(
     async with pool.acquire() as conn:
         row = await conn.fetchrow(query, *values)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant '{tenant_id}' introuvable.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant '{tenant_id}' introuvable."
+        )
     return row_to_tenant(row)
 
 
@@ -200,6 +211,8 @@ async def delete_tenant(
     async with pool.acquire() as conn:
         result = await conn.execute("DELETE FROM tenants WHERE id = $1", tenant_id)
     if result == "DELETE 0":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant '{tenant_id}' introuvable.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant '{tenant_id}' introuvable."
+        )
     print(f"[STUB] Déprovision tenant : {tenant_id}")
     # TODO P1 : purger Neo4j, topics Kafka, etc.

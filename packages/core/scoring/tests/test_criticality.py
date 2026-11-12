@@ -7,9 +7,16 @@ from packages.core.scoring.criticality import max_criticality_along_path, node_c
 
 
 def _node(attributes: dict) -> CuzNode:
-    return CuzNode(tenant_id="acmecorp", node_type=NodeType.APPLICATION, name="app",
-                   confidence_score=0.9, freshness_score=1.0, sources=["servicenow"],
-                   last_seen=datetime.now(UTC), attributes=attributes)
+    return CuzNode(
+        tenant_id="acmecorp",
+        node_type=NodeType.APPLICATION,
+        name="app",
+        confidence_score=0.9,
+        freshness_score=1.0,
+        sources=["servicenow"],
+        last_seen=datetime.now(UTC),
+        attributes=attributes,
+    )
 
 
 def test_node_without_criticality_returns_none():

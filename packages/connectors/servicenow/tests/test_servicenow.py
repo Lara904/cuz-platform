@@ -13,10 +13,10 @@ TENANT = "acmecorp"
 INSTANCE = "https://dev353984.service-now.com"
 
 
-
 def skip_if_instance_5xx(test):
     """Tests live : skip UNIQUEMENT si le PDI renvoie une erreur 5xx (instance indisponible).
     Toute autre erreur reste un échec."""
+
     @functools.wraps(test)
     async def wrapper(*args, **kwargs):
         try:
@@ -25,7 +25,9 @@ def skip_if_instance_5xx(test):
             if e.response.status_code >= 500:
                 pytest.skip(f"instance ServiceNow indisponible ({e.response.status_code})")
             raise
+
     return wrapper
+
 
 @pytest.fixture
 def connector():

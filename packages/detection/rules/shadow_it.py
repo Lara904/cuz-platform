@@ -2,6 +2,7 @@
 """SHADOW-IT-001 : tout nœud vu par une source technique mais absent de la CMDB
 déclarée (ServiceNow). C'est un indicateur de couverture CMDB, pas une mesure de
 complétude du SI réel : l'inconnu total est par définition non mesurable."""
+
 from packages.detection.rules import RuleSpec, make_rule
 
 SHADOW_IT_001 = RuleSpec(

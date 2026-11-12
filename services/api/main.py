@@ -2,6 +2,7 @@
 services/api/main.py
 Point d'entrée FastAPI de l'API CUz — Tenant management & Authentification (P0.8)
 """
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI

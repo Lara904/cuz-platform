@@ -20,14 +20,18 @@ def _auth() -> dict[str, str]:
 
 
 def test_coverage_below_100_when_unknown_nodes_exist(monkeypatch):
-    body = _client(monkeypatch, 212, 155).get(f"/api/v1/tenants/{TENANT}/coverage",
-                                              headers=_auth()).json()
+    body = (
+        _client(monkeypatch, 212, 155)
+        .get(f"/api/v1/tenants/{TENANT}/coverage", headers=_auth())
+        .json()
+    )
     assert body["cmdb_coverage_pct"] == 73.1
     assert body["not_declared"] == 57
     assert body["cmdb_coverage_pct"] < 100
 
 
 def test_coverage_is_null_on_empty_tenant(monkeypatch):
-    body = _client(monkeypatch, 0, 0).get(f"/api/v1/tenants/{TENANT}/coverage",
-                                          headers=_auth()).json()
+    body = (
+        _client(monkeypatch, 0, 0).get(f"/api/v1/tenants/{TENANT}/coverage", headers=_auth()).json()
+    )
     assert body["cmdb_coverage_pct"] is None

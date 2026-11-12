@@ -13,6 +13,7 @@ Neo4j : seul le GraphWriter écrit dans le graphe (RÈGLE 1) et il n'a pas encor
 Le relecteur est l'identité du token, jamais une valeur fournie par le client.
 Splink est importé à l'appel : l'API démarre même sans ces dépendances installées.
 """
+
 import json
 from typing import Literal
 
@@ -70,7 +71,10 @@ def _node_details(tenant_id: str, ids: list[str]) -> dict[str, dict]:
             "MATCH (n:CuzNode {tenant_id: $t}) WHERE n.id IN $ids "
             "RETURN n.id AS id, n.name AS name, n.node_type AS node_type, n.sources AS sources, "
             "n.confidence_score AS confidence_score, n.freshness_score AS freshness_score, "
-            "n.attributes AS attributes, n.tags AS tags", t=tenant_id, ids=ids).data()
+            "n.attributes AS attributes, n.tags AS tags",
+            t=tenant_id,
+            ids=ids,
+        ).data()
     for r in rows:
         r["attributes"] = json.loads(r["attributes"] or "{}")
         r["tags"] = json.loads(r["tags"] or "{}")
@@ -85,7 +89,9 @@ def _review_pairs(tenant_id: str) -> list[dict] | None:
     if loaded is None:
         return None
     df, resolver = loaded
-    review = ProbabilisticResolver.classify(resolver.predict_candidate_pairs(df))["needs_human_review"]
+    review = ProbabilisticResolver.classify(resolver.predict_candidate_pairs(df))[
+        "needs_human_review"
+    ]
     review = review.sort_values("match_probability", ascending=False)
     ids = sorted({*review["unique_id_l"], *review["unique_id_r"]})
     nodes = _node_details(tenant_id, ids)
@@ -93,12 +99,14 @@ def _review_pairs(tenant_id: str) -> list[dict] | None:
     for row in review.itertuples():
         if row.unique_id_l not in nodes or row.unique_id_r not in nodes:
             continue  # nœud disparu du graphe depuis le calcul
-        pairs.append({
-            "pair_id": er_audit.pair_id_for(row.unique_id_l, row.unique_id_r),
-            "match_probability": round(float(row.match_probability), 4),
-            "node_a": nodes[row.unique_id_l],
-            "node_b": nodes[row.unique_id_r],
-        })
+        pairs.append(
+            {
+                "pair_id": er_audit.pair_id_for(row.unique_id_l, row.unique_id_r),
+                "match_probability": round(float(row.match_probability), 4),
+                "node_a": nodes[row.unique_id_l],
+                "node_b": nodes[row.unique_id_r],
+            }
+        )
     return pairs
 
 
@@ -117,8 +125,9 @@ async def _pending(tenant_id: str) -> list[dict]:
 
 
 @router.get("/stats")
-async def entity_resolution_stats(tenant_id: str,
-                                  _: TokenData = Depends(require_role(Role.VIEWER))):
+async def entity_resolution_stats(
+    tenant_id: str, _: TokenData = Depends(require_role(Role.VIEWER))
+):
     stats = await run_in_threadpool(_stats, tenant_id)
     if stats is None:
         raise HTTPException(status_code=409, detail="modèle ER non entraîné pour ce tenant")
@@ -126,18 +135,23 @@ async def entity_resolution_stats(tenant_id: str,
 
 
 @router.get("/pairs")
-async def list_pending_pairs(tenant_id: str, page: int = 1, size: int = 20,
-                             _: TokenData = Depends(require_role(Role.VIEWER))):
+async def list_pending_pairs(
+    tenant_id: str, page: int = 1, size: int = 20, _: TokenData = Depends(require_role(Role.VIEWER))
+):
     if page < 1 or not 1 <= size <= 100:
         raise HTTPException(status_code=400, detail="page >= 1 et 1 <= size <= 100")
     pending = await _pending(tenant_id)
     start = (page - 1) * size
-    return {"total": len(pending), "page": page, "size": size, "pairs": pending[start:start + size]}
+    return {
+        "total": len(pending),
+        "page": page,
+        "size": size,
+        "pairs": pending[start : start + size],
+    }
 
 
 @router.get("/pairs/{pair_id}")
-async def get_pair(tenant_id: str, pair_id: str,
-                   _: TokenData = Depends(require_role(Role.VIEWER))):
+async def get_pair(tenant_id: str, pair_id: str, _: TokenData = Depends(require_role(Role.VIEWER))):
     for pair in await _pending(tenant_id):
         if pair["pair_id"] == pair_id:
             return pair
@@ -145,8 +159,12 @@ async def get_pair(tenant_id: str, pair_id: str,
 
 
 @router.post("/pairs/{pair_id}/decide")
-async def decide_pair(tenant_id: str, pair_id: str, body: PairDecision,
-                      user: TokenData = Depends(require_role(Role.OPERATOR))):
+async def decide_pair(
+    tenant_id: str,
+    pair_id: str,
+    body: PairDecision,
+    user: TokenData = Depends(require_role(Role.OPERATOR)),
+):
     pair = next((p for p in await _pending(tenant_id) if p["pair_id"] == pair_id), None)
     if pair is None:
         latest = await er_audit.latest_decisions(tenant_id)
@@ -154,12 +172,24 @@ async def decide_pair(tenant_id: str, pair_id: str, body: PairDecision,
             raise HTTPException(status_code=409, detail="Pair already decided")
         raise HTTPException(status_code=404, detail="Pair not found")
     # RÈGLE 4 : la trace est écrite avant toute réponse de succès ; échec d'écriture = échec de l'action
-    await er_audit.record(er_audit.Decision(
-        tenant_id=tenant_id, pair_id=pair_id, node_a_id=pair["node_a"]["id"],
-        node_b_id=pair["node_b"]["id"], match_probability=pair["match_probability"],
-        decision=body.decision, reviewer=user.sub, note=body.note))
-    return {"status": "recorded", "pair_id": pair_id, "decision": body.decision,
-            "graph_merge_applied": False}
+    await er_audit.record(
+        er_audit.Decision(
+            tenant_id=tenant_id,
+            pair_id=pair_id,
+            node_a_id=pair["node_a"]["id"],
+            node_b_id=pair["node_b"]["id"],
+            match_probability=pair["match_probability"],
+            decision=body.decision,
+            reviewer=user.sub,
+            note=body.note,
+        )
+    )
+    return {
+        "status": "recorded",
+        "pair_id": pair_id,
+        "decision": body.decision,
+        "graph_merge_applied": False,
+    }
 
 
 @router.get("/decisions/stats")

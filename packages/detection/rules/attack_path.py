@@ -47,8 +47,12 @@ def _decode_cves(raw_attributes: list[str | None]) -> list[dict[str, Any]]:
             attrs = json.loads(raw or "{}")
         except json.JSONDecodeError:
             continue
-        cves.append({k: attrs.get(k) for k in
-                     ("cve_id", "cvss_score", "epss_score", "epss_source", "patch_status")})
+        cves.append(
+            {
+                k: attrs.get(k)
+                for k in ("cve_id", "cvss_score", "epss_score", "epss_source", "patch_status")
+            }
+        )
     return cves
 
 

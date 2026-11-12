@@ -39,8 +39,11 @@ class _FakeProducer:
 
 def test_reconcile_publishes_all_raw_events(monkeypatch):
     _FakeProducer.published = []
-    monkeypatch.setattr(reconcile, "build_connectors",
-                        lambda t: {"servicenow": _FakeConnector(events=["a", "b", "c"])})
+    monkeypatch.setattr(
+        reconcile,
+        "build_connectors",
+        lambda t: {"servicenow": _FakeConnector(events=["a", "b", "c"])},
+    )
     monkeypatch.setattr(reconcile, "EventProducer", _FakeProducer)
     assert asyncio.run(reconcile.reconcile("servicenow", "acmecorp")) == 3
     assert _FakeProducer.published == ["a", "b", "c"]
@@ -48,8 +51,9 @@ def test_reconcile_publishes_all_raw_events(monkeypatch):
 
 def test_reconcile_failure_raises_and_publishes_nothing(monkeypatch):
     _FakeProducer.published = []
-    monkeypatch.setattr(reconcile, "build_connectors",
-                        lambda t: {"servicenow": _FakeConnector(fail=True)})
+    monkeypatch.setattr(
+        reconcile, "build_connectors", lambda t: {"servicenow": _FakeConnector(fail=True)}
+    )
     monkeypatch.setattr(reconcile, "EventProducer", _FakeProducer)
     with pytest.raises(ConnectionError):
         asyncio.run(reconcile.reconcile("servicenow", "acmecorp"))
@@ -69,10 +73,20 @@ def test_all_cronjob_sources_have_a_connector_key():
 def test_decayed_node_recomputes_freshness_from_last_seen():
     now = datetime.now(UTC)
     old = (now - timedelta(days=1)).isoformat()  # USER : demi-vie 1 jour → ~0.5
-    row = {"id": "u1", "tenant_id": "acmecorp", "node_type": NodeType.USER.value,
-           "name": "djanaD", "external_id": "e", "external_ids": {}, "confidence_score": 0.95,
-           "sources": ["entra_id"], "created_at": old, "last_seen": old,
-           "attributes": "{\"has_mfa\": false}", "tags": "{}"}
+    row = {
+        "id": "u1",
+        "tenant_id": "acmecorp",
+        "node_type": NodeType.USER.value,
+        "name": "djanaD",
+        "external_id": "e",
+        "external_ids": {},
+        "confidence_score": 0.95,
+        "sources": ["entra_id"],
+        "created_at": old,
+        "last_seen": old,
+        "attributes": '{"has_mfa": false}',
+        "tags": "{}",
+    }
     node = freshness_decay.decayed_node(row, now)
     assert 0.45 <= node.freshness_score <= 0.55
     assert node.confidence_score == 0.95

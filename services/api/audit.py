@@ -7,6 +7,7 @@ produit une ligne dans finding_audit. La table est protégée par un trigger qui
 refuse UPDATE, DELETE et TRUNCATE. Une écriture d'audit qui échoue doit faire
 échouer l'action métier : pas de changement d'état sans trace.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -86,9 +87,15 @@ async def record(entry: AuditEntry) -> None:
                (tenant_id, finding_id, rule_id, action, old_status, new_status,
                 actor, justification, expiry)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-            entry.tenant_id, entry.finding_id, entry.rule_id, entry.action,
-            entry.old_status, entry.new_status, entry.actor,
-            entry.justification, entry.expiry,
+            entry.tenant_id,
+            entry.finding_id,
+            entry.rule_id,
+            entry.action,
+            entry.old_status,
+            entry.new_status,
+            entry.actor,
+            entry.justification,
+            entry.expiry,
         )
 
 
@@ -99,7 +106,8 @@ async def history(tenant_id: str, finding_id: str) -> list[dict]:
             """SELECT action, old_status, new_status, actor, justification, expiry, occurred_at
                FROM finding_audit WHERE tenant_id = $1 AND finding_id = $2
                ORDER BY occurred_at, id""",
-            tenant_id, finding_id,
+            tenant_id,
+            finding_id,
         )
     return [dict(r) for r in rows]
 
@@ -112,6 +120,7 @@ async def recent(tenant_id: str, limit: int = 20) -> list[dict]:
             """SELECT finding_id, rule_id, action, actor, occurred_at AS created_at
                FROM finding_audit WHERE tenant_id = $1
                ORDER BY occurred_at DESC, id DESC LIMIT $2""",
-            tenant_id, limit,
+            tenant_id,
+            limit,
         )
     return [dict(r) for r in rows]

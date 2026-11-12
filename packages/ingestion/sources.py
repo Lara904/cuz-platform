@@ -1,5 +1,6 @@
 # packages/ingestion/sources.py
 """Fabrique des connecteurs par source (utilisée par run_scan et les CronJobs de réconciliation)."""
+
 import logging
 import os
 
@@ -13,6 +14,7 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
     connectors = {}
     try:
         from packages.connectors.minio_connector.connector import MinIOConnector
+
         connectors["minio"] = MinIOConnector(
             tenant_id=tenant_id,
             endpoint=os.getenv("MINIO_ENDPOINT", "localhost:9000"),
@@ -24,6 +26,7 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
         logger.warning("MinIO ignoré : %s", e)
     try:
         from packages.connectors.gitea.connector import GiteaConnector
+
         connectors["gitea"] = GiteaConnector(
             tenant_id=tenant_id,
             base_url=os.getenv("GITEA_URL", "http://localhost:3000"),
@@ -34,6 +37,7 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
         logger.warning("Gitea ignoré : %s", e)
     try:
         from packages.connectors.entra_id.connector import EntraIDConnector
+
         connectors["entra_id"] = EntraIDConnector(
             tenant_id_cuz=tenant_id,
             entra_tenant_id=os.getenv("ENTRA_TENANT_ID", ""),
@@ -44,6 +48,7 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
         logger.warning("Entra ID ignoré : %s", e)
     try:
         from packages.connectors.servicenow.connector import ServiceNowConnector
+
         connectors["servicenow"] = ServiceNowConnector(
             tenant_id=tenant_id,
             instance_url=os.getenv("SERVICENOW_URL", ""),
@@ -56,24 +61,31 @@ def build_connectors(tenant_id: str = TENANT) -> dict:
         logger.warning("ServiceNow ignoré : %s", e)
     try:
         from packages.connectors.terraform.connector import TerraformConnector
+
         connectors["terraform"] = TerraformConnector(tenant_id=tenant_id, config={})
     except Exception as e:
         logger.warning("Terraform ignoré : %s", e)
     sim_url = os.getenv("CLOUD_DETECTION_SIM_URL")
     if sim_url:
         from packages.connectors.cloud_detection.connector import CloudDetectionConnector
+
         connectors["cloud_detection"] = CloudDetectionConnector(tenant_id, sim_url, {})
     vuln_url = os.getenv("VULN_SCANNER_URL")
     vuln_fixtures = os.getenv("VULN_SCANNER_FIXTURES", "tests/fixtures/acmecorp_cves.json")
     if vuln_url or os.path.exists(vuln_fixtures):
         from packages.connectors.vuln_scanner.connector import VulnScannerConnector
+
         connectors["vuln_scanner"] = VulnScannerConnector(
-            tenant_id, scanner_url=vuln_url or "", api_key=os.getenv("VULN_SCANNER_API_KEY", ""),
-            fixtures_path=None if vuln_url else vuln_fixtures)
+            tenant_id,
+            scanner_url=vuln_url or "",
+            api_key=os.getenv("VULN_SCANNER_API_KEY", ""),
+            fixtures_path=None if vuln_url else vuln_fixtures,
+        )
     kubeconfig = os.getenv("KUBECONFIG_PATH")
     if kubeconfig:
         try:
             from packages.connectors.kubernetes.connector import KubernetesConnector
+
             connectors["kubernetes"] = KubernetesConnector(tenant_id, kubeconfig_path=kubeconfig)
         except Exception as e:
             logger.warning("Kubernetes ignoré : %s", e)

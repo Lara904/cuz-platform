@@ -5,6 +5,7 @@ tests/fixtures/defender_alerts_sim (fictif). Seuls l'URL et les credentials chan
 
 RÈGLE 1 : aucune écriture dans Neo4j, tout passe par Redpanda.
 """
+
 import asyncio
 import os
 import uuid
@@ -21,8 +22,13 @@ POLL_SECONDS = float(os.getenv("CLOUD_DETECTION_POLL_SECONDS", "30"))
 
 
 class CloudDetectionConnector(IConnector):
-    def __init__(self, tenant_id: str, eventhub_url: str, credentials: dict,
-                 transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(
+        self,
+        tenant_id: str,
+        eventhub_url: str,
+        credentials: dict,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         super().__init__(tenant_id, credentials)
         self.eventhub_url = eventhub_url.rstrip("/")
         self.credentials = credentials
@@ -44,8 +50,9 @@ class CloudDetectionConnector(IConnector):
             events += [self._wrap("alert", a) for a in r.json().get("alerts", [])]
             r2 = await client.get(f"{self.eventhub_url}/recommendations")
             r2.raise_for_status()
-            events += [self._wrap("recommendation", rec)
-                       for rec in r2.json().get("recommendations", [])]
+            events += [
+                self._wrap("recommendation", rec) for rec in r2.json().get("recommendations", [])
+            ]
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:

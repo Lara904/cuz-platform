@@ -4,10 +4,17 @@ from packages.detection.models import Finding
 
 
 def _f(rule_id: str, nodes: list[str], confidence: float) -> Finding:
-    return Finding(tenant_id="acmecorp", rule_id=rule_id, severity="HIGH", title="t",
-                   description="d", affected_nodes=nodes,
-                   affected_node_names=nodes, remediation_hint="h",
-                   confidence_score=confidence)
+    return Finding(
+        tenant_id="acmecorp",
+        rule_id=rule_id,
+        severity="HIGH",
+        title="t",
+        description="d",
+        affected_nodes=nodes,
+        affected_node_names=nodes,
+        remediation_hint="h",
+        confidence_score=confidence,
+    )
 
 
 def test_same_rule_same_nodes_keeps_highest_confidence():

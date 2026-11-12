@@ -82,7 +82,11 @@ class GiteaConnector(IConnector):
         (échec fermé). L'API ne renvoie jamais le secret : avec un secret configuré, un hook existant
         est donc toujours mis à jour (PATCH idempotent)."""
         secret = os.getenv("GITEA_WEBHOOK_SECRET", "")
-        config = {"url": callback_url, "content_type": "json", **({"secret": secret} if secret else {})}
+        config = {
+            "url": callback_url,
+            "content_type": "json",
+            **({"secret": secret} if secret else {}),
+        }
         existing = await client.get(f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks")
         hooks = existing.json() if existing.status_code == 200 else []
         current = next((h for h in hooks if h.get("config", {}).get("url") == callback_url), None)
@@ -91,7 +95,8 @@ class GiteaConnector(IConnector):
                 return True
             r = await client.patch(
                 f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks/{current['id']}",
-                json={"config": config, "events": WEBHOOK_EVENTS, "active": True})
+                json={"config": config, "events": WEBHOOK_EVENTS, "active": True},
+            )
             return r.status_code in (200, 201)
         payload = {"active": True, "config": config, "events": WEBHOOK_EVENTS, "type": "gitea"}
         r = await client.post(f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks", json=payload)
@@ -135,11 +140,15 @@ class GiteaConnector(IConnector):
         async with httpx.AsyncClient(headers=self.headers, timeout=30) as client:
             for repo in await self._get_repos(client):
                 events.append(await self._repo_event(client, repo))
-                await self._register_webhook(client, repo["owner"]["login"], repo["name"], webhook_url)
+                await self._register_webhook(
+                    client, repo["owner"]["login"], repo["name"], webhook_url
+                )
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:
         while True:
             for e in await self.pull_full():
                 yield e
-            await asyncio.sleep(86400)  # scan quotidien : filet de sécurité, le temps réel passe par le webhook
+            await asyncio.sleep(
+                86400
+            )  # scan quotidien : filet de sécurité, le temps réel passe par le webhook

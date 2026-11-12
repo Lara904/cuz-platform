@@ -8,6 +8,7 @@ Données du dashboard (P1.11).
 health_score = moyenne, sur tous les nœuds du tenant, de (confidence_score + freshness_score) / 2,
 arrondie à 2 décimales (0..1). Indicateur de qualité des données, pas de sécurité.
 """
+
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 
@@ -60,14 +61,21 @@ def _freshness(tenant_id: str) -> list[dict]:
                    sum(CASE WHEN f < $stale THEN 1 ELSE 0 END) AS stale
             ORDER BY source
             """,
-            t=tenant_id, fresh=FRESH_THRESHOLD, stale=STALE_THRESHOLD,
+            t=tenant_id,
+            fresh=FRESH_THRESHOLD,
+            stale=STALE_THRESHOLD,
         ).data()
-    return [{
-        "source": r["source"] or "inconnue",
-        "nodes": r["nodes"],
-        "avg_freshness": round(r["avg_freshness"] or 0.0, 3),
-        "fresh": r["fresh"], "aging": r["aging"], "stale": r["stale"],
-    } for r in rows]
+    return [
+        {
+            "source": r["source"] or "inconnue",
+            "nodes": r["nodes"],
+            "avg_freshness": round(r["avg_freshness"] or 0.0, 3),
+            "fresh": r["fresh"],
+            "aging": r["aging"],
+            "stale": r["stale"],
+        }
+        for r in rows
+    ]
 
 
 @router.get("/stats")

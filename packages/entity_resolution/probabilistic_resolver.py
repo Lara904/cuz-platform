@@ -18,6 +18,7 @@ seront ré-estimés sur les étiquettes de la validation humaine (P2.6).
 
 Usage : python -m packages.entity_resolution.probabilistic_resolver --tenant acmecorp [--train]
 """
+
 import argparse
 import asyncio
 import json
@@ -97,11 +98,18 @@ def _record(unique_id: str, node_type: str, name: str | None, ip: Any, source: s
 
 
 def nodes_to_dataframe(nodes: Iterable[CuzNode]) -> pd.DataFrame:
-    return pd.DataFrame([
-        _record(n.id, n.node_type.value, n.name, n.attributes.get("ip_address"),
-                n.sources[0] if n.sources else "unknown")
-        for n in nodes
-    ])
+    return pd.DataFrame(
+        [
+            _record(
+                n.id,
+                n.node_type.value,
+                n.name,
+                n.attributes.get("ip_address"),
+                n.sources[0] if n.sources else "unknown",
+            )
+            for n in nodes
+        ]
+    )
 
 
 def graph_to_dataframe(tenant_id: str) -> pd.DataFrame:
@@ -111,15 +119,18 @@ def graph_to_dataframe(tenant_id: str) -> pd.DataFrame:
     with Neo4jClient.get_driver().session() as session:
         rows = session.run(
             "MATCH (n:CuzNode {tenant_id: $t}) RETURN n.id AS id, n.node_type AS node_type, "
-            "n.name AS name, n.attributes AS attrs, n.sources AS sources", t=tenant_id).data()
+            "n.name AS name, n.attributes AS attrs, n.sources AS sources",
+            t=tenant_id,
+        ).data()
     records = []
     for r in rows:
         try:
             ip = json.loads(r["attrs"] or "{}").get("ip_address")
         except json.JSONDecodeError:
             ip = None
-        records.append(_record(r["id"], r["node_type"], r["name"], ip,
-                               (r["sources"] or ["unknown"])[0]))
+        records.append(
+            _record(r["id"], r["node_type"], r["name"], ip, (r["sources"] or ["unknown"])[0])
+        )
     return pd.DataFrame(records)
 
 
@@ -144,18 +155,26 @@ class ProbabilisticResolver:
         """Paramètres Fellegi-Sunter : prior (hypothèse explicite) et m (valeurs d'expert) sont
         spécifiés ; seuls les u sont estimés sur les données, par échantillonnage aléatoire."""
 
-        self.linker = Linker(DuckDBAPI().register(df), build_settings_dict(
-            prior_match_probability(len(df), same_type_pairs(df)), exact_name_u(df)))
+        self.linker = Linker(
+            DuckDBAPI().register(df),
+            build_settings_dict(
+                prior_match_probability(len(df), same_type_pairs(df)), exact_name_u(df)
+            ),
+        )
         training = self.linker.training
         self.training_report = {}
         self.training_report["prior_probability"] = (
-            f"assumed: {ASSUMED_DUPLICATE_RATE:.0%} de doublons avant P2.5 (guide), non estimé")
-        self._step("u_probabilities", lambda: training.estimate_u_using_random_sampling(
-            max_pairs=max_pairs))
+            f"assumed: {ASSUMED_DUPLICATE_RATE:.0%} de doublons avant P2.5 (guide), non estimé"
+        )
+        self._step(
+            "u_probabilities",
+            lambda: training.estimate_u_using_random_sampling(max_pairs=max_pairs),
+        )
         # m fixés (EXPERT_M_PROBABILITIES) : l'EM non supervisé est dégénéré quand le graphe contient
         # très peu de doublons (il apprend l'inverse : m=0 sur « nom très proche »).
         self.training_report["m_probabilities"] = (
-            "specified: valeurs d'expert, à ré-estimer sur étiquettes humaines (P2.6)")
+            "specified: valeurs d'expert, à ré-estimer sur étiquettes humaines (P2.6)"
+        )
 
     def save_model(self, path: Path | None = None) -> Path:
         assert self.linker is not None, "modèle non entraîné"
@@ -173,11 +192,15 @@ class ProbabilisticResolver:
         """Paires candidates avec leur match_probability, limitées aux sources différentes."""
         assert self.linker is not None, "modèle non chargé"
         predictions = self.linker.inference.predict(
-            threshold_match_probability=HUMAN_REVIEW_LOWER_THRESHOLD).as_pandas_dataframe()
+            threshold_match_probability=HUMAN_REVIEW_LOWER_THRESHOLD
+        ).as_pandas_dataframe()
         if predictions.empty:
             return predictions
         source = df.set_index("unique_id")["source"]
-        src_l, src_r = predictions["unique_id_l"].map(source), predictions["unique_id_r"].map(source)
+        src_l, src_r = (
+            predictions["unique_id_l"].map(source),
+            predictions["unique_id_r"].map(source),
+        )
         keep = (src_l != src_r) & ~src_l.isin(EXCLUDED_SOURCES) & ~src_r.isin(EXCLUDED_SOURCES)
         return predictions[keep].reset_index(drop=True)
 
@@ -186,8 +209,9 @@ class ProbabilisticResolver:
         p = predictions_df["match_probability"]
         return {
             "auto_merge": predictions_df[p >= FUSION_AUTO_THRESHOLD],
-            "needs_human_review": predictions_df[(p >= HUMAN_REVIEW_LOWER_THRESHOLD)
-                                                 & (p < FUSION_AUTO_THRESHOLD)],
+            "needs_human_review": predictions_df[
+                (p >= HUMAN_REVIEW_LOWER_THRESHOLD) & (p < FUSION_AUTO_THRESHOLD)
+            ],
             "rejected": predictions_df[p < HUMAN_REVIEW_LOWER_THRESHOLD],
         }
 
@@ -199,8 +223,9 @@ def _gamma_levels(comparison: dict) -> list[tuple[int, dict]]:
     return [(len(levels) - 1 - i, lv) for i, lv in enumerate(levels)]
 
 
-def recalibrate_m(model: dict, gamma_counts: dict[str, dict[int, int]],
-                  strength: int = M_SMOOTHING_STRENGTH) -> dict:
+def recalibrate_m(
+    model: dict, gamma_counts: dict[str, dict[int, int]], strength: int = M_SMOOTHING_STRENGTH
+) -> dict:
     """Fonction pure : m_new = (observés + strength * m_ancien) / (N + strength), par comparaison.
     `gamma_counts` : output_column_name -> {gamma -> nb de paires validées}."""
     for comparison in model["comparisons"]:
@@ -210,18 +235,25 @@ def recalibrate_m(model: dict, gamma_counts: dict[str, dict[int, int]],
         if n == 0:
             continue
         for gamma, lv in levels:
-            lv["m_probability"] = (counts.get(gamma, 0) + strength * lv["m_probability"]) / (n + strength)
+            lv["m_probability"] = (counts.get(gamma, 0) + strength * lv["m_probability"]) / (
+                n + strength
+            )
     return model
 
 
 def _m_snapshot(model: dict) -> dict[str, list[float]]:
-    return {c["output_column_name"]: [round(lv["m_probability"], 4) for _, lv in _gamma_levels(c)]
-            for c in model["comparisons"]}
+    return {
+        c["output_column_name"]: [round(lv["m_probability"], 4) for _, lv in _gamma_levels(c)]
+        for c in model["comparisons"]
+    }
 
 
-def retrain_from_merged_pairs(resolver: "ProbabilisticResolver", df: pd.DataFrame,
-                              merged_pairs: list[tuple[str, str]],
-                              path: Path | None = None) -> dict:
+def retrain_from_merged_pairs(
+    resolver: "ProbabilisticResolver",
+    df: pd.DataFrame,
+    merged_pairs: list[tuple[str, str]],
+    path: Path | None = None,
+) -> dict:
     """Recalibre les m du modèle sur les paires validées « merge ». L'ancien modèle est conservé
     (*.prev.json). Lève InsufficientLabelsError sous MIN_POSITIVE_LABELS paires exploitables."""
     target = path or model_path(resolver.tenant_id)
@@ -229,17 +261,26 @@ def retrain_from_merged_pairs(resolver: "ProbabilisticResolver", df: pd.DataFram
     assert resolver.linker is not None
     predictions = resolver.linker.inference.predict().as_pandas_dataframe()
     wanted = {frozenset(p) for p in merged_pairs}
-    labelled = predictions[[frozenset(p) in wanted for p in zip(
-        predictions["unique_id_l"], predictions["unique_id_r"], strict=True)]]
+    labelled = predictions[
+        [
+            frozenset(p) in wanted
+            for p in zip(predictions["unique_id_l"], predictions["unique_id_r"], strict=True)
+        ]
+    ]
     if len(labelled) < MIN_POSITIVE_LABELS:
         raise InsufficientLabelsError(
             f"{len(labelled)} paire(s) validée(s) exploitable(s) sur {len(wanted)} ; "
-            f"minimum {MIN_POSITIVE_LABELS}")
+            f"minimum {MIN_POSITIVE_LABELS}"
+        )
     model = json.loads(target.read_text(encoding="utf-8"))
     before = _m_snapshot(model)
-    counts = {c["output_column_name"]: {int(k): int(v) for k, v in
-                                        labelled[f"gamma_{c['output_column_name']}"].value_counts().items()}
-              for c in model["comparisons"]}
+    counts = {
+        c["output_column_name"]: {
+            int(k): int(v)
+            for k, v in labelled[f"gamma_{c['output_column_name']}"].value_counts().items()
+        }
+        for c in model["comparisons"]
+    }
     recalibrate_m(model, counts)
     shutil.copyfile(target, target.with_suffix(".prev.json"))
     target.write_text(json.dumps(model, indent=2), encoding="utf-8")
@@ -263,8 +304,10 @@ def compute_stats(tenant_id: str, df: pd.DataFrame, resolver: ProbabilisticResol
         "auto_merge_pairs": auto,
         "pending_review_pairs": review,
         "duplicate_rate_pct": measure_duplicate_rate(len(df), auto),
-        "thresholds": {"auto_merge": FUSION_AUTO_THRESHOLD,
-                       "human_review_lower": HUMAN_REVIEW_LOWER_THRESHOLD},
+        "thresholds": {
+            "auto_merge": FUSION_AUTO_THRESHOLD,
+            "human_review_lower": HUMAN_REVIEW_LOWER_THRESHOLD,
+        },
         "duplicate_rate_basis": "estimated_from_model",  # pas de paires confirmées humainement
     }
 
@@ -276,8 +319,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tenant", required=True)
     parser.add_argument("--train", action="store_true", help="réentraîne et sauvegarde le modèle")
-    parser.add_argument("--retrain-from-decisions", action="store_true",
-                        help="recalibre les m sur les paires validées (er_decisions)")
+    parser.add_argument(
+        "--retrain-from-decisions",
+        action="store_true",
+        help="recalibre les m sur les paires validées (er_decisions)",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 

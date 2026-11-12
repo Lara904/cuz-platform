@@ -7,6 +7,7 @@ le seul à écrire dans Neo4j (règle 1).
 
 Usage : python -m packages.detection.freshness_decay --tenant acmecorp
 """
+
 import argparse
 import json
 import logging
@@ -81,8 +82,9 @@ def run(tenant_id: str) -> int:
             timestamp=now,
             node=node,
         )
-        producer.producer.produce(topic=topic, key=event.event_id.encode(),
-                                  value=event.model_dump_json().encode())
+        producer.producer.produce(
+            topic=topic, key=event.event_id.encode(), value=event.model_dump_json().encode()
+        )
         published += 1
     producer.flush()
     logger.info("freshness-decay : %d nœuds republiés sur %s", published, topic)

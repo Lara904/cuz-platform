@@ -4,10 +4,11 @@ from packages.core.models.node import CuzNode
 
 STRONG_ID_KEYS = {
     "servicenow": "servicenow",
-    "minio":      "minio",
-    "entra_id":   "entra_id",
-    "gitea":      "gitea",
+    "minio": "minio",
+    "entra_id": "entra_id",
+    "gitea": "gitea",
 }
+
 
 class DeterministicResolver:
     """Match sur identifiants forts — doublons < 10% garantis."""

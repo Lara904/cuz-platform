@@ -27,8 +27,11 @@ def test_pull_full_returns_one_event_per_instance():
 
 
 def test_mapper_bucket_node_has_scores_and_iac_tag():
-    res = {"type": "minio_bucket", "name": "acmecorp-archive",
-           "attributes": {"bucket": "acmecorp-archive"}}
+    res = {
+        "type": "minio_bucket",
+        "name": "acmecorp-archive",
+        "attributes": {"bucket": "acmecorp-archive"},
+    }
     node = TerraformMapper(TENANT).map_resource(res)
     assert node.node_type == NodeType.STORAGE
     assert node.name == "acmecorp-archive"
@@ -38,20 +41,33 @@ def test_mapper_bucket_node_has_scores_and_iac_tag():
 
 
 def test_mapper_ignores_unknown_resource_types():
-    assert TerraformMapper(TENANT).map_resource({"type": "google_storage_bucket", "name": "x",
-                                                  "attributes": {}}) is None
+    assert (
+        TerraformMapper(TENANT).map_resource(
+            {"type": "google_storage_bucket", "name": "x", "attributes": {}}
+        )
+        is None
+    )
 
 
 def test_load_resources_flattens_instances(tmp_path):
-    path = _state(tmp_path, [{"type": "minio_bucket", "name": "b", "instances": [
-        {"attributes": {"bucket": "b"}}, {"attributes": {"bucket": "b2"}}]}])
+    path = _state(
+        tmp_path,
+        [
+            {
+                "type": "minio_bucket",
+                "name": "b",
+                "instances": [{"attributes": {"bucket": "b"}}, {"attributes": {"bucket": "b2"}}],
+            }
+        ],
+    )
     assert len(load_resources(path)) == 2
 
 
 def test_normalizer_produces_terraform_storage_node():
     conn = TerraformConnector(TENANT, {"path": DEFAULT_TFSTATE})
-    raw = [e for e in asyncio.run(conn.pull_full())
-           if e.raw_data["resource"]["type"] == "minio_bucket"][0]
+    raw = [
+        e for e in asyncio.run(conn.pull_full()) if e.raw_data["resource"]["type"] == "minio_bucket"
+    ][0]
     results = Normalizer().normalize(raw)
     assert len(results) == 1
     assert results[0].node.id == "terraform:minio_bucket.acmecorp-archive"
@@ -100,7 +116,13 @@ def test_state_path_read_from_environment(monkeypatch, tmp_path):
 
 def test_aws_and_azure_types_are_mapped():
     mapper = TerraformMapper(TENANT)
-    assert mapper.map_resource({"type": "aws_s3_bucket", "name": "b",
-                                "attributes": {"bucket": "b"}}).node_type == NodeType.STORAGE
-    assert mapper.map_resource({"type": "aws_instance", "name": "i",
-                                "attributes": {}}).node_type == NodeType.SERVER
+    assert (
+        mapper.map_resource(
+            {"type": "aws_s3_bucket", "name": "b", "attributes": {"bucket": "b"}}
+        ).node_type
+        == NodeType.STORAGE
+    )
+    assert (
+        mapper.map_resource({"type": "aws_instance", "name": "i", "attributes": {}}).node_type
+        == NodeType.SERVER
+    )

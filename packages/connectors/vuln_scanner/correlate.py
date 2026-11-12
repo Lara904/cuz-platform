@@ -9,6 +9,7 @@ Les arêtes sont publiées sur cuz.normalized (règle 1) : le GraphWriter les é
 
 Usage : python -m packages.connectors.vuln_scanner.correlate --tenant acmecorp
 """
+
 import argparse
 import logging
 import re
@@ -50,8 +51,14 @@ def version_matches(version: str, constraint: str | None) -> bool:
             if not m:
                 return False
             op, bound = m.group(1) or "==", Version(m.group(2))
-            if not {"<": v < bound, "<=": v <= bound, ">": v > bound, ">=": v >= bound,
-                    "==": v == bound, "=": v == bound}[op]:
+            if not {
+                "<": v < bound,
+                "<=": v <= bound,
+                ">": v > bound,
+                ">=": v >= bound,
+                "==": v == bound,
+                "=": v == bound,
+            }[op]:
                 return False
         return True
     except InvalidVersion:
@@ -67,20 +74,27 @@ def correlate(cves: list[GraphNode], deps: list[GraphNode], tenant_id: str) -> l
         for dep in deps:
             if not package or dep.attributes.get("package_name") != package:
                 continue
-            if not version_matches(str(dep.attributes.get("version", "")),
-                                   cve.attributes.get("version_affected")):
+            if not version_matches(
+                str(dep.attributes.get("version", "")), cve.attributes.get("version_affected")
+            ):
                 continue
             sources = sorted({*cve.sources, *dep.sources})
-            edges.append(CuzEdge(
-                tenant_id=tenant_id, edge_type=EdgeType.AFFECTS,
-                source_id=cve.id, target_id=dep.id,
-                confidence_score=compute_confidence(sources),
-                freshness_score=compute_freshness(NodeType.VULNERABILITY, now),
-                sources=sources,
-                attributes={"resolution_method": "package_version_match",
-                            "version": dep.attributes.get("version"),
-                            "version_affected": cve.attributes.get("version_affected")},
-            ))
+            edges.append(
+                CuzEdge(
+                    tenant_id=tenant_id,
+                    edge_type=EdgeType.AFFECTS,
+                    source_id=cve.id,
+                    target_id=dep.id,
+                    confidence_score=compute_confidence(sources),
+                    freshness_score=compute_freshness(NodeType.VULNERABILITY, now),
+                    sources=sources,
+                    attributes={
+                        "resolution_method": "package_version_match",
+                        "version": dep.attributes.get("version"),
+                        "version_affected": cve.attributes.get("version_affected"),
+                    },
+                )
+            )
     return edges
 
 
@@ -96,7 +110,8 @@ def _read_graph(session, tenant_id: str) -> tuple[list[GraphNode], list[GraphNod
     rows = session.run(
         "MATCH (v:CuzNode {tenant_id:$t, node_type:'VULNERABILITY'}) "
         "RETURN v.id AS id, v.name AS name, v.attributes AS attrs, v.sources AS sources",
-        t=tenant_id).data()
+        t=tenant_id,
+    ).data()
     cves, deps = [], []
     for r in rows:
         node = GraphNode(r["id"], r["name"], parse(r["attrs"]), tuple(r["sources"] or ()))
@@ -123,15 +138,26 @@ def main() -> int:
     producer = EventProducer()
     for edge in edges:
         event = NormalizedEvent(
-            event_id=str(uuid.uuid4()), raw_event_id=f"vuln-correlate-{uuid.uuid4()}",
-            tenant_id=args.tenant, source="vuln_scanner", event_type=EventType.EDGE_CREATED,
-            timestamp=datetime.now(UTC), edge=edge)
-        producer.producer.produce(topic=f"cuz.normalized.{args.tenant}",
-                                  key=event.raw_event_id.encode(),
-                                  value=event.model_dump_json().encode())
+            event_id=str(uuid.uuid4()),
+            raw_event_id=f"vuln-correlate-{uuid.uuid4()}",
+            tenant_id=args.tenant,
+            source="vuln_scanner",
+            event_type=EventType.EDGE_CREATED,
+            timestamp=datetime.now(UTC),
+            edge=edge,
+        )
+        producer.producer.produce(
+            topic=f"cuz.normalized.{args.tenant}",
+            key=event.raw_event_id.encode(),
+            value=event.model_dump_json().encode(),
+        )
     producer.flush()
-    logger.info("corrélation : %d arête(s) AFFECTS publiée(s) (%d CVE, %d dépendances)",
-                len(edges), len(cves), len(deps))
+    logger.info(
+        "corrélation : %d arête(s) AFFECTS publiée(s) (%d CVE, %d dépendances)",
+        len(edges),
+        len(cves),
+        len(deps),
+    )
     return 0
 
 

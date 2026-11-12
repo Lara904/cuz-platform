@@ -21,9 +21,14 @@ class FakeProducer:
 
 
 def _event(i: int, source: str = "kubernetes", age_s: float = 0.0) -> RawEvent:
-    return RawEvent(event_id=f"{source}-{i}", tenant_id="acmecorp", source=source,
-                    event_type=EventType.NODE_UPDATED,
-                    timestamp=datetime.now(UTC) - timedelta(seconds=age_s), raw_data={})
+    return RawEvent(
+        event_id=f"{source}-{i}",
+        tenant_id="acmecorp",
+        source=source,
+        event_type=EventType.NODE_UPDATED,
+        timestamp=datetime.now(UTC) - timedelta(seconds=age_s),
+        raw_data={},
+    )
 
 
 class FiniteConnector:
@@ -76,8 +81,12 @@ def test_p95_is_nearest_rank_and_empty_is_zero():
 async def test_failing_stream_is_restarted_without_stopping_the_others():
     producer = FakeProducer()
     flaky = FlakyConnector()
-    pipeline = EventPipeline({"kubernetes": flaky, "cloud_detection": BlockingConnector()},
-                             producer, backoff_seconds=0.01, max_backoff_seconds=0.02)
+    pipeline = EventPipeline(
+        {"kubernetes": flaky, "cloud_detection": BlockingConnector()},
+        producer,
+        backoff_seconds=0.01,
+        max_backoff_seconds=0.02,
+    )
     task = asyncio.create_task(pipeline.run())
     for _ in range(200):  # attend que les deux flux aient publié
         if pipeline.published["kubernetes"] and pipeline.published["cloud_detection"]:
@@ -94,8 +103,12 @@ async def test_failing_stream_is_restarted_without_stopping_the_others():
 @pytest.mark.asyncio
 async def test_finished_stream_is_relaunched():
     producer = FakeProducer()
-    pipeline = EventPipeline({"kubernetes": FiniteConnector("kubernetes", 3)}, producer,
-                             backoff_seconds=0.01, max_backoff_seconds=0.01)
+    pipeline = EventPipeline(
+        {"kubernetes": FiniteConnector("kubernetes", 3)},
+        producer,
+        backoff_seconds=0.01,
+        max_backoff_seconds=0.01,
+    )
     task = asyncio.create_task(pipeline.run())
     for _ in range(200):
         if pipeline.published["kubernetes"] >= 6:

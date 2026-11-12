@@ -1,6 +1,7 @@
 # packages/detection/opa_client.py
 """Client OPA : charge les policies Rego et évalue les nœuds du graphe.
 Les findings OPA sont fusionnés avec ceux des règles Cypher (DetectionRunner)."""
+
 import json
 import logging
 import os
@@ -60,16 +61,18 @@ class OPAClient:
                         logger.error("OPA %s failed for %s: %s", package, node["id"], e)
                         continue
                     for res in _deny_items(r.json().get("result")):
-                        findings.append(Finding(
-                            tenant_id=node["tenant_id"],
-                            rule_id=res["rule_id"],
-                            severity=res["severity"],
-                            title=res["title"],
-                            description=res["description"],
-                            affected_nodes=[node["id"]],
-                            affected_node_names=[node["name"]],
-                            remediation_hint=res["remediation_hint"],
-                        ))
+                        findings.append(
+                            Finding(
+                                tenant_id=node["tenant_id"],
+                                rule_id=res["rule_id"],
+                                severity=res["severity"],
+                                title=res["title"],
+                                description=res["description"],
+                                affected_nodes=[node["id"]],
+                                affected_node_names=[node["name"]],
+                                remediation_hint=res["remediation_hint"],
+                            )
+                        )
         return findings
 
 

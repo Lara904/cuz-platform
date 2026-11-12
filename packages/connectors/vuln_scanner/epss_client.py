@@ -22,7 +22,9 @@ class EPSSClient:
             data = r.json().get("data", [])
             if not data:
                 return None
-            return {"epss_score": float(data[0]["epss"]),
-                    "epss_percentile": float(data[0]["percentile"])}
+            return {
+                "epss_score": float(data[0]["epss"]),
+                "epss_percentile": float(data[0]["percentile"]),
+            }
         except (httpx.HTTPError, ValueError, KeyError):
             return None

@@ -10,14 +10,22 @@ TENANT = "acmecorp"
 
 
 def _finding(rule_id: str, nodes: list[str], severity: str, confidence: float) -> Finding:
-    return Finding(tenant_id=TENANT, rule_id=rule_id, severity=severity, title=f"{rule_id} title",
-                   description="d", affected_nodes=nodes, affected_node_names=nodes,
-                   remediation_hint="fix", confidence_score=confidence)
+    return Finding(
+        tenant_id=TENANT,
+        rule_id=rule_id,
+        severity=severity,
+        title=f"{rule_id} title",
+        description="d",
+        affected_nodes=nodes,
+        affected_node_names=nodes,
+        remediation_hint="fix",
+        confidence_score=confidence,
+    )
 
 
 FAKE_FINDINGS = [
     _finding("IAM-001", ["u1"], "HIGH", 0.9),
-    _finding("IAM-001", ["u1"], "HIGH", 0.95),          # doublon : doit être écarté
+    _finding("IAM-001", ["u1"], "HIGH", 0.95),  # doublon : doit être écarté
     _finding("ATTACK-PATH-001-PARTIAL", ["u1", "r1", "d1"], "CRITICAL", 0.88),
     _finding("STORAGE-PUBLIC-001", ["b1"], "HIGH", 0.85),
     _finding("CIS-003", ["a1"], "MEDIUM", 0.8),
@@ -32,8 +40,11 @@ async def _fake_record(entry) -> None:
 
 
 def _app(monkeypatch) -> FastAPI:
-    monkeypatch.setattr(findings_router, "_detect", lambda tenant_id: [
-        f.model_copy(deep=True) for f in FAKE_FINDINGS])
+    monkeypatch.setattr(
+        findings_router,
+        "_detect",
+        lambda tenant_id: [f.model_copy(deep=True) for f in FAKE_FINDINGS],
+    )
     monkeypatch.setattr(findings_router, "_store", {})
     monkeypatch.setattr(findings_router.audit, "record", _fake_record)
     AUDIT_LOG.clear()
@@ -69,8 +80,10 @@ def test_list_is_deduplicated_and_sorted_by_severity(monkeypatch):
 def test_filters_and_pagination(monkeypatch):
     client = TestClient(_app(monkeypatch))
     h = _auth(Role.VIEWER)
-    assert [f["rule_id"] for f in client.get(_base("/?severity=high"), headers=h).json()] == \
-        ["IAM-001", "STORAGE-PUBLIC-001"]
+    assert [f["rule_id"] for f in client.get(_base("/?severity=high"), headers=h).json()] == [
+        "IAM-001",
+        "STORAGE-PUBLIC-001",
+    ]
     assert len(client.get(_base("/?rule_id=CIS-003"), headers=h).json()) == 1
     assert len(client.get(_base("/?page=2&size=3"), headers=h).json()) == 1
 

@@ -21,9 +21,14 @@ def _auth(tenant: str = TENANT) -> dict[str, str]:
 
 
 def test_stats_returned(monkeypatch):
-    stats = {"tenant_id": TENANT, "total_nodes": 284, "auto_merge_pairs": 0,
-             "pending_review_pairs": 0, "duplicate_rate_pct": 0.0,
-             "duplicate_rate_basis": "estimated_from_model"}
+    stats = {
+        "tenant_id": TENANT,
+        "total_nodes": 284,
+        "auto_merge_pairs": 0,
+        "pending_review_pairs": 0,
+        "duplicate_rate_pct": 0.0,
+        "duplicate_rate_basis": "estimated_from_model",
+    }
     r = _client(monkeypatch, stats).get(URL, headers=_auth())
     assert r.status_code == 200 and r.json() == stats
 
@@ -50,11 +55,24 @@ BASE = f"/api/v1/tenants/{TENANT}/entity-resolution"
 
 
 def _pair(pid: str, prob: float = 0.78) -> dict:
-    return {"pair_id": pid, "match_probability": prob,
-            "node_a": {"id": f"a-{pid}", "name": "srv-01", "node_type": "SERVER", "sources": ["servicenow"],
-                       "attributes": {"ip_address": "10.0.0.1"}},
-            "node_b": {"id": f"b-{pid}", "name": "srv-O1", "node_type": "SERVER", "sources": ["azure"],
-                       "attributes": {}}}
+    return {
+        "pair_id": pid,
+        "match_probability": prob,
+        "node_a": {
+            "id": f"a-{pid}",
+            "name": "srv-01",
+            "node_type": "SERVER",
+            "sources": ["servicenow"],
+            "attributes": {"ip_address": "10.0.0.1"},
+        },
+        "node_b": {
+            "id": f"b-{pid}",
+            "name": "srv-O1",
+            "node_type": "SERVER",
+            "sources": ["azure"],
+            "attributes": {},
+        },
+    }
 
 
 class FakeAudit:
@@ -75,8 +93,13 @@ class FakeAudit:
     async def stats(self, tenant_id):
         latest = await self.latest_decisions(tenant_id)
         n = lambda k: sum(1 for v in latest.values() if v["decision"] == k)  # noqa: E731
-        return {"total_reviewed": len(latest), "total_decisions": len(self.rows),
-                "merged": n("merge"), "rejected": n("reject"), "flagged": n("flag")}
+        return {
+            "total_reviewed": len(latest),
+            "total_decisions": len(self.rows),
+            "merged": n("merge"),
+            "rejected": n("reject"),
+            "flagged": n("flag"),
+        }
 
     pair_id_for = staticmethod(er_audit.pair_id_for)
     Decision = er_audit.Decision
@@ -112,8 +135,11 @@ def test_list_pairs_409_without_model(monkeypatch):
 
 def test_decide_merge_records_decision_with_token_identity(review):
     client, fake = review
-    r = client.post(f"{BASE}/pairs/p1/decide", json={"decision": "merge", "note": "même CI"},
-                    headers=_auth_role(Role.OPERATOR, "lara"))
+    r = client.post(
+        f"{BASE}/pairs/p1/decide",
+        json={"decision": "merge", "note": "même CI"},
+        headers=_auth_role(Role.OPERATOR, "lara"),
+    )
     assert r.status_code == 200 and r.json()["graph_merge_applied"] is False
     assert [(d.pair_id, d.decision, d.reviewer) for d in fake.rows] == [("p1", "merge", "lara")]
     assert client.get(f"{BASE}/decisions/stats", headers=_auth()).json()["merged"] == 1
@@ -123,37 +149,50 @@ def test_decide_merge_records_decision_with_token_identity(review):
 
 def test_reviewer_from_body_is_ignored(review):
     client, fake = review
-    client.post(f"{BASE}/pairs/p1/decide", json={"decision": "reject", "reviewer": "usurpateur"},
-                headers=_auth_role(Role.OPERATOR, "lara"))
+    client.post(
+        f"{BASE}/pairs/p1/decide",
+        json={"decision": "reject", "reviewer": "usurpateur"},
+        headers=_auth_role(Role.OPERATOR, "lara"),
+    )
     assert fake.rows[0].reviewer == "lara"
 
 
 def test_flag_keeps_pair_pending_and_marks_it(review):
     client, _ = review
-    client.post(f"{BASE}/pairs/p1/decide", json={"decision": "flag"},
-                headers=_auth_role(Role.OPERATOR))
+    client.post(
+        f"{BASE}/pairs/p1/decide", json={"decision": "flag"}, headers=_auth_role(Role.OPERATOR)
+    )
     pairs = client.get(f"{BASE}/pairs", headers=_auth()).json()["pairs"]
     assert [(p["pair_id"], p["flagged"]) for p in pairs] == [("p1", True), ("p2", False)]
 
 
 def test_decide_invalid_decision_is_rejected(review):
     client, _ = review
-    r = client.post(f"{BASE}/pairs/p1/decide", json={"decision": "maybe"},
-                    headers=_auth_role(Role.OPERATOR))
+    r = client.post(
+        f"{BASE}/pairs/p1/decide", json={"decision": "maybe"}, headers=_auth_role(Role.OPERATOR)
+    )
     assert r.status_code == 422
 
 
 def test_decide_unknown_pair_404_and_already_decided_409(review):
     client, _ = review
     h = _auth_role(Role.OPERATOR)
-    assert client.post(f"{BASE}/pairs/nope/decide", json={"decision": "merge"}, headers=h).status_code == 404
+    assert (
+        client.post(f"{BASE}/pairs/nope/decide", json={"decision": "merge"}, headers=h).status_code
+        == 404
+    )
     client.post(f"{BASE}/pairs/p1/decide", json={"decision": "reject"}, headers=h)
-    assert client.post(f"{BASE}/pairs/p1/decide", json={"decision": "merge"}, headers=h).status_code == 409
+    assert (
+        client.post(f"{BASE}/pairs/p1/decide", json={"decision": "merge"}, headers=h).status_code
+        == 409
+    )
 
 
 def test_decide_requires_operator_role(review):
     client, fake = review
-    r = client.post(f"{BASE}/pairs/p1/decide", json={"decision": "merge"}, headers=_auth_role(Role.VIEWER))
+    r = client.post(
+        f"{BASE}/pairs/p1/decide", json={"decision": "merge"}, headers=_auth_role(Role.VIEWER)
+    )
     assert r.status_code == 403 and not fake.rows
 
 
@@ -161,8 +200,9 @@ def test_audit_failure_fails_the_action(review):
     client, fake = review
     fake.fail = True
     with pytest.raises(RuntimeError):  # pas de succès sans trace (règle 4)
-        client.post(f"{BASE}/pairs/p1/decide", json={"decision": "merge"},
-                    headers=_auth_role(Role.OPERATOR))
+        client.post(
+            f"{BASE}/pairs/p1/decide", json={"decision": "merge"}, headers=_auth_role(Role.OPERATOR)
+        )
     assert not fake.rows
 
 

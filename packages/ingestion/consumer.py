@@ -27,7 +27,8 @@ class PipelineConsumer:
                 "group.id": group_id,
                 "auto.offset.reset": "earliest",
                 "enable.auto.commit": False,
-                "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID") or f"cuz-ingestion-{socket.gethostname()}-{os.getpid()}",
+                "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID")
+                or f"cuz-ingestion-{socket.gethostname()}-{os.getpid()}",
                 "session.timeout.ms": 10000,
             }
         )

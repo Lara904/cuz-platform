@@ -3,6 +3,7 @@ services/api/middleware/logging.py
 Middleware de logging structuré pour toutes les requêtes HTTP.
 Chaque requête produit une ligne JSON avec : méthode, path, status, durée, IP.
 """
+
 import logging
 import time
 import uuid

@@ -5,6 +5,7 @@ Clé composite : (rule_id, ensemble des affected_nodes). Parmi les findings qui
 partagent la clé, on ne garde que celui de confidence_score le plus élevé.
 À égalité, le premier rencontré est conservé.
 """
+
 from packages.detection.models import Finding
 
 FindingKey = tuple[str, tuple[str, ...]]

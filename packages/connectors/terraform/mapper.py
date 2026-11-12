@@ -54,11 +54,13 @@ def load_resources(path: Path) -> list[dict]:
     resources = []
     for res in state.get("resources", []):
         for inst in res.get("instances", []):
-            resources.append({
-                "type": res["type"],
-                "name": res["name"],
-                "attributes": inst.get("attributes", {}),
-            })
+            resources.append(
+                {
+                    "type": res["type"],
+                    "name": res["name"],
+                    "attributes": inst.get("attributes", {}),
+                }
+            )
     return resources
 
 

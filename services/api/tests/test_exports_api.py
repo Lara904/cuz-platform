@@ -23,11 +23,22 @@ def _auth() -> dict[str, str]:
 
 
 def test_csv_has_esa_columns_and_rows(monkeypatch):
-    rows = [{"provider_name": "Acme-Payment-SaaS", "provider_type": "", "country": "",
-             "criticality": "", "exit_plan_status": "draft", "supported_function": "",
-             "contract_end_date": "", "substitutability": "", "concentration_risk": ""}]
-    r = _client(monkeypatch, rows).get(f"/api/v1/tenants/{TENANT}/exports/dora/ict-register",
-                                       headers=_auth())
+    rows = [
+        {
+            "provider_name": "Acme-Payment-SaaS",
+            "provider_type": "",
+            "country": "",
+            "criticality": "",
+            "exit_plan_status": "draft",
+            "supported_function": "",
+            "contract_end_date": "",
+            "substitutability": "",
+            "concentration_risk": "",
+        }
+    ]
+    r = _client(monkeypatch, rows).get(
+        f"/api/v1/tenants/{TENANT}/exports/dora/ict-register", headers=_auth()
+    )
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     parsed = list(csv.DictReader(io.StringIO(r.text)))
@@ -44,6 +55,8 @@ def test_export_requires_auth(monkeypatch):
 def test_export_rejects_other_tenant(monkeypatch):
     client = _client(monkeypatch, [])
     token = create_access_token("auditor", Role.VIEWER, "autre")
-    r = client.get(f"/api/v1/tenants/{TENANT}/exports/dora/ict-register",
-                   headers={"Authorization": f"Bearer {token}"})
+    r = client.get(
+        f"/api/v1/tenants/{TENANT}/exports/dora/ict-register",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert r.status_code == 403

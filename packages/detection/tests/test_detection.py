@@ -18,18 +18,26 @@ def _session(rows: list[dict]) -> MagicMock:
 
 # ── Unitaires : transformation des lignes en Finding ─────────────────────────
 
+
 def test_rule_count_matches_defined_rules():
     assert {r.spec.rule_id for r in ALL_RULES} == {
-        "NET-001", "STORAGE-PUBLIC-001", "K8S-PRIV-001", "IAM-001",
-        "OAUTH-LATERAL-001", "ATTACK-PATH-001-PARTIAL", "DORA-THIRD-PARTY-001",
+        "NET-001",
+        "STORAGE-PUBLIC-001",
+        "K8S-PRIV-001",
+        "IAM-001",
+        "OAUTH-LATERAL-001",
+        "ATTACK-PATH-001-PARTIAL",
+        "DORA-THIRD-PARTY-001",
     }
 
 
 def test_rule_builds_one_finding_per_row():
-    session = _session([
-        {"node_ids": ["a"], "node_names": ["A"]},
-        {"node_ids": ["b"], "node_names": ["B"]},
-    ])
+    session = _session(
+        [
+            {"node_ids": ["a"], "node_names": ["A"]},
+            {"node_ids": ["b"], "node_names": ["B"]},
+        ]
+    )
     findings = make_rule(iam.IAM_001)(session, TENANT)
     assert [f.affected_nodes for f in findings] == [["a"], ["b"]]
     assert all(isinstance(f, Finding) and f.rule_id == "IAM-001" for f in findings)
@@ -67,10 +75,12 @@ def test_rule_query_uses_tenant_parameter():
 
 # ── Intégration : base Neo4j live (skip si indisponible) ────────────────────
 
+
 @pytest.fixture(scope="module")
 def live_findings():
     try:
         from packages.detection.runner import DetectionRunner
+
         runner = DetectionRunner()
         with runner.driver.session() as s:
             s.run("RETURN 1").consume()
@@ -101,25 +111,46 @@ def test_storage_public_detects_acmecorp_public(live_findings):
 
 # ── P2.4 : ATTACK-PATH-001 enrichi avec la CVE réelle du scanner ─────────────
 
+
 def test_attack_path_enriched_with_scanner_cve():
-    session = _session([{
-        "node_ids": ["u", "repo", "gitea:qs@6.5.2", "vuln_scanner:CVE-2022-24999"],
-        "node_names": ["djanaD", "backend", "qs@6.5.2", "CVE-2022-24999"],
-        "cve_attributes": ['{"cve_id": "CVE-2022-24999", "cvss_score": 9.8, '
-                           '"epss_score": 0.157, "epss_source": "first.org", '
-                           '"patch_status": "not_patched", "description": "x"}'],
-    }])
+    session = _session(
+        [
+            {
+                "node_ids": ["u", "repo", "gitea:qs@6.5.2", "vuln_scanner:CVE-2022-24999"],
+                "node_names": ["djanaD", "backend", "qs@6.5.2", "CVE-2022-24999"],
+                "cve_attributes": [
+                    '{"cve_id": "CVE-2022-24999", "cvss_score": 9.8, '
+                    '"epss_score": 0.157, "epss_source": "first.org", '
+                    '"patch_status": "not_patched", "description": "x"}'
+                ],
+            }
+        ]
+    )
     (finding,) = attack_path.RULES[0](session, TENANT)
     assert "CVE-2022-24999" in finding.affected_node_names
-    assert finding.metadata == {"cves": [{
-        "cve_id": "CVE-2022-24999", "cvss_score": 9.8, "epss_score": 0.157,
-        "epss_source": "first.org", "patch_status": "not_patched"}]}
+    assert finding.metadata == {
+        "cves": [
+            {
+                "cve_id": "CVE-2022-24999",
+                "cvss_score": 9.8,
+                "epss_score": 0.157,
+                "epss_source": "first.org",
+                "patch_status": "not_patched",
+            }
+        ]
+    }
 
 
 def test_attack_path_still_detected_without_scanner_cve():
-    session = _session([{"node_ids": ["u", "repo", "dep"],
-                         "node_names": ["djanaD", "backend", "qs@6.5.2"],
-                         "cve_attributes": []}])
+    session = _session(
+        [
+            {
+                "node_ids": ["u", "repo", "dep"],
+                "node_names": ["djanaD", "backend", "qs@6.5.2"],
+                "cve_attributes": [],
+            }
+        ]
+    )
     (finding,) = attack_path.RULES[0](session, TENANT)
     assert finding.affected_node_names == ["djanaD", "backend", "qs@6.5.2"]
     assert finding.metadata == {"cves": []}

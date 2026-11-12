@@ -6,6 +6,7 @@ Chaque pod est émis avec le uid de son namespace et le nom du cluster : pod, na
 cluster partent dans le même message, donc leurs arêtes ne dépendent pas de l'ordre
 d'arrivée entre messages.
 """
+
 import asyncio
 import logging
 import threading
@@ -73,10 +74,12 @@ class KubernetesConnector(IConnector):
             "namespace_uid": namespace_uid,
             "cluster_name": self.cluster_name,
             "node_name": pod.spec.node_name,
-            "privileged": any(c.security_context and c.security_context.privileged
-                              for c in containers),
-            "run_as_root": any(c.security_context and c.security_context.run_as_user == 0
-                               for c in containers),
+            "privileged": any(
+                c.security_context and c.security_context.privileged for c in containers
+            ),
+            "run_as_root": any(
+                c.security_context and c.security_context.run_as_user == 0 for c in containers
+            ),
             "images": [c.image for c in containers],
             "labels": pod.metadata.labels or {},
             "owner_deployment": _owner_deployment(pod),
@@ -87,15 +90,25 @@ class KubernetesConnector(IConnector):
     async def pull_full(self) -> list[RawEvent]:
         events: list[RawEvent] = [self._wrap("cluster", {"name": self.cluster_name})]
         for node in self.core_v1.list_node().items:  # nœuds du cluster → SERVER
-            events.append(self._wrap("node", {"name": node.metadata.name, "uid": node.metadata.uid,
-                                              "cluster_name": self.cluster_name}))
+            events.append(
+                self._wrap(
+                    "node",
+                    {
+                        "name": node.metadata.name,
+                        "uid": node.metadata.uid,
+                        "cluster_name": self.cluster_name,
+                    },
+                )
+            )
         for ns in self.core_v1.list_namespace().items:
             ns_name = ns.metadata.name
             ns_raw = {"name": ns_name, "uid": ns.metadata.uid, "cluster_name": self.cluster_name}
             events.append(self._wrap("namespace", ns_raw))
             services = self._list_services(ns_name)
             for pod in self.core_v1.list_namespaced_pod(ns_name).items:
-                events.append(self._wrap("pod", self._pod_record(pod, ns_name, ns.metadata.uid, services)))
+                events.append(
+                    self._wrap("pod", self._pod_record(pod, ns_name, ns.metadata.uid, services))
+                )
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:
@@ -118,17 +131,21 @@ class KubernetesConnector(IConnector):
         def run_watch() -> None:
             while not stop.is_set():
                 try:
-                    for event in watcher.stream(self.core_v1.list_pod_for_all_namespaces,
-                                                timeout_seconds=60):
+                    for event in watcher.stream(
+                        self.core_v1.list_pod_for_all_namespaces, timeout_seconds=60
+                    ):
                         if stop.is_set():
                             return
                         if event["type"] not in ("ADDED", "MODIFIED"):
                             continue
                         pod = event["object"]
                         ns = pod.metadata.namespace
-                        record = self._pod_record(pod, ns, namespace_uid(ns), self._list_services(ns))
+                        record = self._pod_record(
+                            pod, ns, namespace_uid(ns), self._list_services(ns)
+                        )
                         asyncio.run_coroutine_threadsafe(
-                            queue.put(self._wrap("pod", record)), loop).result()
+                            queue.put(self._wrap("pod", record)), loop
+                        ).result()
                 except Exception as e:  # coupure API, 410 Gone... : on repart
                     logger.warning("watch pods interrompu (%s), reprise dans 5 s", e)
                     stop.wait(5)

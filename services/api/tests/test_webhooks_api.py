@@ -28,14 +28,26 @@ class FakeConnector:
 
 
 def _repo_event() -> RawEvent:
-    return RawEvent(event_id="e1", tenant_id="acmecorp", source="gitea", event_type=EventType.NODE_CREATED,
-                    timestamp=datetime(2000, 1, 1, tzinfo=UTC),
-                    raw_data={"object_type": "repository", "repo_id": "1", "name": "backend"})
+    return RawEvent(
+        event_id="e1",
+        tenant_id="acmecorp",
+        source="gitea",
+        event_type=EventType.NODE_CREATED,
+        timestamp=datetime(2000, 1, 1, tzinfo=UTC),
+        raw_data={"object_type": "repository", "repo_id": "1", "name": "backend"},
+    )
 
 
 def _payload(ref: str = "refs/heads/main") -> dict:
-    return {"ref": ref, "repository": {"id": 1, "name": "backend", "default_branch": "main",
-                                       "owner": {"login": "acmecorp"}}}
+    return {
+        "ref": ref,
+        "repository": {
+            "id": 1,
+            "name": "backend",
+            "default_branch": "main",
+            "owner": {"login": "acmecorp"},
+        },
+    }
 
 
 def _sign(body: bytes, secret: str = SECRET) -> str:
@@ -56,8 +68,12 @@ def hook(monkeypatch):
 
 def _post(client, payload, *, event="push", signature=None, secret=SECRET, headers=None):
     body = json.dumps(payload).encode()
-    h = {"X-Gitea-Event": event, "Content-Type": "application/json",
-         "X-Gitea-Signature": _sign(body, secret) if signature is None else signature, **(headers or {})}
+    h = {
+        "X-Gitea-Event": event,
+        "Content-Type": "application/json",
+        "X-Gitea-Signature": _sign(body, secret) if signature is None else signature,
+        **(headers or {}),
+    }
     return client.post(URL, content=body, headers=h)
 
 
@@ -94,8 +110,15 @@ def test_bad_or_missing_signature_is_rejected(hook):
 def test_hub_signature_header_is_accepted(hook):
     client, published, _ = hook
     body = json.dumps(_payload()).encode()
-    r = client.post(URL, content=body, headers={"X-Gitea-Event": "push", "X-Gitea-Signature": "",
-                                                "X-Hub-Signature-256": "sha256=" + _sign(body)})
+    r = client.post(
+        URL,
+        content=body,
+        headers={
+            "X-Gitea-Event": "push",
+            "X-Gitea-Signature": "",
+            "X-Hub-Signature-256": "sha256=" + _sign(body),
+        },
+    )
     assert r.status_code == 200 and len(published) == 1
 
 
@@ -121,8 +144,9 @@ def test_oversized_payload_is_413(hook, monkeypatch):
 
 def test_gitea_unreachable_is_502_and_nothing_published(hook, monkeypatch):
     client, published, _ = hook
-    monkeypatch.setattr(webhooks, "_connector",
-                        lambda tenant: FakeConnector(error=httpx.ConnectError("down")))
+    monkeypatch.setattr(
+        webhooks, "_connector", lambda tenant: FakeConnector(error=httpx.ConnectError("down"))
+    )
     assert _post(client, _payload()).status_code == 502
     assert not published
 

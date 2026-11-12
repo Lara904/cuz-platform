@@ -47,7 +47,9 @@ class ServiceNowMapper:
                 "sys_class_name": rec.get("sys_class_name"),
                 "ip_address": rec.get("ip_address"),
                 "os": rec.get("os"),
-                "exit_plan_status": rec.get("u_exit_plan_status", rec.get("exit_plan_status")),  # champ custom ServiceNow : préfixe u_ obligatoire
+                "exit_plan_status": rec.get(
+                    "u_exit_plan_status", rec.get("exit_plan_status")
+                ),  # champ custom ServiceNow : préfixe u_ obligatoire
                 "vendor": rec.get("vendor"),
                 "support_group": rec.get("support_group"),
                 "u_vendor_type": rec.get("u_vendor_type"),

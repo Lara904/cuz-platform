@@ -14,6 +14,7 @@ un identifiant explicite côté Gitea (ex: mapping manuel owner -> UPN).
 Ce n'est pas un mécanisme d'entity resolution probabiliste (réservé à
 Splink en P2.5) : c'est un rapprochement déterministe sur une convention
 documentée, dans le même esprit que le reste de P1.6."""
+
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +24,9 @@ from packages.core.models.enums import EdgeType
 from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
 
-DEFAULT_OWNER_MAPPING_PATH = Path(__file__).resolve().parents[2] / "config" / "gitea_owner_mapping.json"
+DEFAULT_OWNER_MAPPING_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "gitea_owner_mapping.json"
+)
 
 
 def load_owner_mapping(path: Path = DEFAULT_OWNER_MAPPING_PATH) -> dict[str, str]:

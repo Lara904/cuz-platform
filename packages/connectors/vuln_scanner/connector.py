@@ -5,6 +5,7 @@ la clé API changent avec un scanner réel (Defender Vulnerability Management ou
 
 RÈGLE 1 : aucune écriture dans Neo4j, tout passe par Redpanda.
 """
+
 import asyncio
 import json
 import os
@@ -20,10 +21,15 @@ from packages.core.models.events import EventType, RawEvent
 
 
 class VulnScannerConnector(IConnector):
-    def __init__(self, tenant_id: str, scanner_url: str = "", api_key: str = "",
-                 fixtures_path: str | None = None,
-                 transport: httpx.AsyncBaseTransport | None = None,
-                 epss_client: EPSSClient | None = None):
+    def __init__(
+        self,
+        tenant_id: str,
+        scanner_url: str = "",
+        api_key: str = "",
+        fixtures_path: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        epss_client: EPSSClient | None = None,
+    ):
         super().__init__(tenant_id, {"scanner_url": scanner_url})
         self.scanner_url = scanner_url.rstrip("/")
         self.api_key = api_key
@@ -32,8 +38,11 @@ class VulnScannerConnector(IConnector):
         self.epss_client = epss_client or EPSSClient()
 
     def _client(self, timeout: float) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=timeout, transport=self.transport,
-                                 headers={"Authorization": f"Bearer {self.api_key}"})
+        return httpx.AsyncClient(
+            timeout=timeout,
+            transport=self.transport,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
 
     async def test_connection(self) -> bool:
         if self.fixtures_path:

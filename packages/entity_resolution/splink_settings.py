@@ -3,6 +3,7 @@
 CuzNode (name, attributes.ip_address). created_at n'est pas comparé : c'est la date d'ingestion
 du scan, pas une date de création de la ressource. Un modèle par tenant, pas de fuite cross-tenant
 (cf. critère P2.14)."""
+
 import splink.comparison_library as cl
 from splink import SettingsCreator, block_on
 
@@ -47,7 +48,7 @@ def build_settings(prior: float) -> SettingsCreator:
 # humaines (P2.6) via estimate_m_from_pairwise_labels. Ordre = niveaux hors niveau NULL.
 EXPERT_M_PROBABILITIES: dict[str, list[float]] = {
     "name": [0.45, 0.35, 0.15, 0.05],  # exact, JW >= 0.9, JW >= 0.7, autre
-    "ip_address": [0.80, 0.20],        # exact, autre
+    "ip_address": [0.80, 0.20],  # exact, autre
 }
 
 
@@ -60,6 +61,9 @@ def build_settings_dict(prior: float, exact_name_u: float) -> dict:
         for level in comparison["comparison_levels"]:
             if not level.get("is_null_level"):
                 level["m_probability"] = next(m_values)
-                if comparison["output_column_name"] == "name" and "Exact match" in level["label_for_charts"]:
+                if (
+                    comparison["output_column_name"] == "name"
+                    and "Exact match" in level["label_for_charts"]
+                ):
                     level["u_probability"] = exact_name_u
     return settings

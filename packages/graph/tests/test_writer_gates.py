@@ -20,14 +20,22 @@ def _writer() -> GraphWriter:
 
 def _event(confidence: float) -> NormalizedEvent:
     node = CuzNode(
-        tenant_id=TENANT, node_type=NodeType.USER, name="djana",
-        external_id="u1", confidence_score=confidence, freshness_score=1.0,
+        tenant_id=TENANT,
+        node_type=NodeType.USER,
+        name="djana",
+        external_id="u1",
+        confidence_score=confidence,
+        freshness_score=1.0,
         attributes={"has_mfa": False},
     )
     return NormalizedEvent(
-        event_id="evt-1", raw_event_id="raw-1", tenant_id=TENANT,
-        source="entra_id", event_type=EventType.NODE_CREATED,
-        timestamp=datetime.now(UTC), node=node,
+        event_id="evt-1",
+        raw_event_id="raw-1",
+        tenant_id=TENANT,
+        source="entra_id",
+        event_type=EventType.NODE_CREATED,
+        timestamp=datetime.now(UTC),
+        node=node,
     )
 
 
@@ -44,10 +52,12 @@ def test_quarantine_publishes_to_quarantine_topic():
 
 def test_native_attrs_splits_criticality_dict():
     writer = _writer()
-    native = writer._native_attrs({
-        "has_mfa": False,
-        "criticality": {"D": 3, "I": 2, "C": 4, "T": None},
-    })
+    native = writer._native_attrs(
+        {
+            "has_mfa": False,
+            "criticality": {"D": 3, "I": 2, "C": 4, "T": None},
+        }
+    )
     assert native == {
         "has_mfa": False,
         "criticality_D": 3,

@@ -2,6 +2,7 @@
 services/api/models/connector.py
 Schémas Pydantic pour les connecteurs par tenant.
 """
+
 from datetime import datetime
 from enum import Enum
 from typing import Any

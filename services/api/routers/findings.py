@@ -19,6 +19,7 @@ Déduplication : clé (rule_id, affected_nodes), voir packages/detection/dedup.p
 Stockage des statuts en mémoire pour P1 ; id, statut et justification sont
 conservés entre deux calculs grâce à la même clé.
 """
+
 import csv
 import io
 import logging
@@ -90,19 +91,32 @@ async def _get(tenant_id: str, finding_id: str) -> Finding:
 
 
 async def _transition(
-    tenant_id: str, finding_id: str, new_status: str, action: str,
-    user: TokenData, metadata: dict[str, object], justification: str | None = None,
+    tenant_id: str,
+    finding_id: str,
+    new_status: str,
+    action: str,
+    user: TokenData,
+    metadata: dict[str, object],
+    justification: str | None = None,
     expiry: datetime | None = None,
 ) -> Finding:
     """Trace le changement dans l'audit PUIS l'applique. Ordre imposé par la règle 4."""
     finding = await _get(tenant_id, finding_id)
     if finding.status == new_status:
         raise HTTPException(status_code=409, detail=f"Finding already {new_status}")
-    await audit.record(audit.AuditEntry(
-        tenant_id=tenant_id, finding_id=finding.id, rule_id=finding.rule_id,
-        action=action, old_status=finding.status, new_status=new_status,
-        actor=user.sub, justification=justification, expiry=expiry,
-    ))
+    await audit.record(
+        audit.AuditEntry(
+            tenant_id=tenant_id,
+            finding_id=finding.id,
+            rule_id=finding.rule_id,
+            action=action,
+            old_status=finding.status,
+            new_status=new_status,
+            actor=user.sub,
+            justification=justification,
+            expiry=expiry,
+        )
+    )
     finding.status = new_status
     finding.metadata = {**finding.metadata, **metadata}
     finding.updated_at = datetime.now(UTC)
@@ -128,7 +142,7 @@ async def list_findings(
     if status:
         findings = [f for f in findings if f.status == status]
     start = (page - 1) * size
-    return findings[start:start + size]
+    return findings[start : start + size]
 
 
 @router.get("/stats")
@@ -147,23 +161,35 @@ async def findings_stats(tenant_id: str, _: TokenData = Depends(require_role(Rol
 @router.get("/export/csv")
 async def export_csv(tenant_id: str, _: TokenData = Depends(require_role(Role.VIEWER))):
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=[
-        "id", "rule_id", "severity", "title", "status", "confidence_score",
-        "affected_node_names", "remediation_hint", "created_at",
-    ])
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "id",
+            "rule_id",
+            "severity",
+            "title",
+            "status",
+            "confidence_score",
+            "affected_node_names",
+            "remediation_hint",
+            "created_at",
+        ],
+    )
     writer.writeheader()
     for f in await _load_async(tenant_id):
-        writer.writerow({
-            "id": f.id,
-            "rule_id": f.rule_id,
-            "severity": f.severity,
-            "title": f.title,
-            "status": f.status,
-            "confidence_score": f.confidence_score,
-            "affected_node_names": ",".join(f.affected_node_names),
-            "remediation_hint": f.remediation_hint,
-            "created_at": f.created_at.isoformat(),
-        })
+        writer.writerow(
+            {
+                "id": f.id,
+                "rule_id": f.rule_id,
+                "severity": f.severity,
+                "title": f.title,
+                "status": f.status,
+                "confidence_score": f.confidence_score,
+                "affected_node_names": ",".join(f.affected_node_names),
+                "remediation_hint": f.remediation_hint,
+                "created_at": f.created_at.isoformat(),
+            }
+        )
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -180,14 +206,16 @@ async def refresh_findings(tenant_id: str, user: TokenData = Depends(require_rol
 
 
 @router.get("/{finding_id}", response_model=Finding)
-async def get_finding(tenant_id: str, finding_id: str,
-                      _: TokenData = Depends(require_role(Role.VIEWER))):
+async def get_finding(
+    tenant_id: str, finding_id: str, _: TokenData = Depends(require_role(Role.VIEWER))
+):
     return await _get(tenant_id, finding_id)
 
 
 @router.get("/{finding_id}/audit")
-async def finding_audit(tenant_id: str, finding_id: str,
-                        _: TokenData = Depends(require_role(Role.VIEWER))):
+async def finding_audit(
+    tenant_id: str, finding_id: str, _: TokenData = Depends(require_role(Role.VIEWER))
+):
     await _get(tenant_id, finding_id)  # 404 si le finding n'existe pas
     return await audit.history(tenant_id, finding_id)
 
@@ -201,11 +229,18 @@ async def acknowledge(
     user: TokenData = Depends(require_role(Role.OPERATOR)),
 ):
     await _transition(
-        tenant_id, finding_id, "acknowledged", "acknowledged", user,
-        metadata={"justification": justification,
-                  "expiry": expiry.isoformat() if expiry else None,
-                  "acknowledged_by": user.sub},
-        justification=justification, expiry=expiry,
+        tenant_id,
+        finding_id,
+        "acknowledged",
+        "acknowledged",
+        user,
+        metadata={
+            "justification": justification,
+            "expiry": expiry.isoformat() if expiry else None,
+            "acknowledged_by": user.sub,
+        },
+        justification=justification,
+        expiry=expiry,
     )
     return {"status": "acknowledged", "finding_id": finding_id}
 
@@ -218,8 +253,13 @@ async def false_positive(
     user: TokenData = Depends(require_role(Role.OPERATOR)),
 ):
     await _transition(
-        tenant_id, finding_id, "false_positive", "false_positive", user,
-        metadata={"reason": reason, "marked_by": user.sub}, justification=reason,
+        tenant_id,
+        finding_id,
+        "false_positive",
+        "false_positive",
+        user,
+        metadata={"reason": reason, "marked_by": user.sub},
+        justification=reason,
     )
     return {"status": "false_positive", "finding_id": finding_id}
 
@@ -232,7 +272,11 @@ async def resolve(
     user: TokenData = Depends(require_role(Role.OPERATOR)),
 ):
     await _transition(
-        tenant_id, finding_id, "resolved", "resolved", user,
+        tenant_id,
+        finding_id,
+        "resolved",
+        "resolved",
+        user,
         metadata={"resolution": justification, "resolved_by": user.sub},
         justification=justification,
     )

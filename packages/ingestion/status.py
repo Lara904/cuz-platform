@@ -4,6 +4,7 @@
 Un échec de connecteur ne supprime jamais de nœuds : on met à jour l'état, et le
 dashboard affiche l'âge du dernier scan réussi (règle scoring.md).
 """
+
 import os
 
 import asyncpg
@@ -42,7 +43,8 @@ async def mark_success(tenant_id: str, source: str) -> None:
                VALUES ($1, $2, now(), now(), NULL)
                ON CONFLICT (tenant_id, source) DO UPDATE SET
                  last_attempt = now(), last_successful_sync = now(), last_error = NULL""",
-            tenant_id, source,
+            tenant_id,
+            source,
         )
     finally:
         await conn.close()
@@ -56,7 +58,9 @@ async def mark_failure(tenant_id: str, source: str, error: str) -> None:
                VALUES ($1, $2, now(), $3)
                ON CONFLICT (tenant_id, source) DO UPDATE SET
                  last_attempt = now(), last_error = $3""",
-            tenant_id, source, error[:500],
+            tenant_id,
+            source,
+            error[:500],
         )
     finally:
         await conn.close()

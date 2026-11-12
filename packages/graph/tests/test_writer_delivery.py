@@ -59,6 +59,7 @@ def test_consumer_uses_static_membership_and_short_session():
         return MagicMock()
 
     import packages.graph.writer as writer_mod
+
     orig = writer_mod.Consumer
     writer_mod.Consumer = fake_consumer
     try:

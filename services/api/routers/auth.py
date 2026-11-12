@@ -11,6 +11,7 @@ Endpoint : POST /auth/token
 NOTE SÉCURITÉ : Ce mock n'est JAMAIS déployé en production.
 En prod, les tokens sont émis par Azure AD et validés via JWKS.
 """
+
 import os
 from typing import Annotated
 

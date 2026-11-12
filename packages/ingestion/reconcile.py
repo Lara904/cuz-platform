@@ -6,6 +6,7 @@ Usage : python -m packages.ingestion.reconcile --source servicenow --tenant acme
 Scan complet du connecteur → RawEvents publiés sur cuz.raw.{tenant} (règle 1 : jamais
 d'écriture directe dans Neo4j). Succès ou échec est enregistré dans connector_status.
 """
+
 import argparse
 import asyncio
 import logging
@@ -21,8 +22,13 @@ load_dotenv()
 logger = logging.getLogger("reconcile")
 
 # Nom de source des CronJobs → clé de build_connectors()
-SOURCE_KEYS = {"servicenow": "servicenow", "entra_id": "entra_id", "gitea": "gitea",
-               "minio": "minio", "terraform": "terraform"}
+SOURCE_KEYS = {
+    "servicenow": "servicenow",
+    "entra_id": "entra_id",
+    "gitea": "gitea",
+    "minio": "minio",
+    "terraform": "terraform",
+}
 
 
 async def reconcile(source: str, tenant_id: str) -> int:

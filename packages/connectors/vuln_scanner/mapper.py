@@ -37,8 +37,12 @@ class VulnScannerMapper:
             tags={"source": "vuln_scanner", "node_subtype": "cve"},
         )
 
-    def map_affects_edge(self, cve_node: CuzNode, target_node: CuzNode,
-                         resolution_method: str = "package_version_match") -> CuzEdge:
+    def map_affects_edge(
+        self,
+        cve_node: CuzNode,
+        target_node: CuzNode,
+        resolution_method: str = "package_version_match",
+    ) -> CuzEdge:
         last_seen = datetime.now(UTC)
         sources = sorted({*cve_node.sources, *target_node.sources})
         return CuzEdge(

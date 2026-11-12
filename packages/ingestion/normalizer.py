@@ -105,15 +105,24 @@ class Normalizer:
             elif obj == "pod":
                 data = raw.raw_data
                 cluster = self._stamp(mapper.map_cluster({"name": data["cluster_name"]}))
-                namespace = self._stamp(mapper.map_namespace({
-                    "name": data["namespace"], "uid": data["namespace_uid"],
-                    "cluster_name": data["cluster_name"]}))
+                namespace = self._stamp(
+                    mapper.map_namespace(
+                        {
+                            "name": data["namespace"],
+                            "uid": data["namespace_uid"],
+                            "cluster_name": data["cluster_name"],
+                        }
+                    )
+                )
                 pod = self._stamp(mapper.map_pod(data))
                 nodes = [cluster, namespace, pod]
                 # Le SERVER du node_name est ré-émis avec le pod : pas de dépendance d'ordre
                 if data.get("node_name"):
-                    server = self._stamp(mapper.map_node({"name": data["node_name"],
-                                                          "cluster_name": data["cluster_name"]}))
+                    server = self._stamp(
+                        mapper.map_node(
+                            {"name": data["node_name"], "cluster_name": data["cluster_name"]}
+                        )
+                    )
                     nodes.append(server)
                 for node in nodes:
                     results.append(self._wrap(raw, node=node))

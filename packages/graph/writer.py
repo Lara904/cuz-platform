@@ -19,9 +19,16 @@ logger = logging.getLogger(__name__)
 # natif (n.has_mfa = false) au lieu d'un CONTAINS fragile sur le JSON
 # (json.dumps ajoute un espace après ':', ce qui casse tout CONTAINS).
 NATIVE_PROMOTED_KEYS = [
-    "has_mfa", "is_public", "privileged", "run_as_root",
-    "contains_pii", "exit_plan_status", "owner",
-    "account_enabled", "package_name", "owner_deployment",
+    "has_mfa",
+    "is_public",
+    "privileged",
+    "run_as_root",
+    "contains_pii",
+    "exit_plan_status",
+    "owner",
+    "account_enabled",
+    "package_name",
+    "owner_deployment",
 ]
 
 # Neo4j n'accepte pas les maps comme valeur de propriété : la criticité DICT
@@ -87,33 +94,41 @@ ON MATCH SET
 RETURN r.id as edge_id
 """
 
+
 class GraphWriter:
-    def __init__(self, bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-                 group_id: str = "cuz-graph-writer"):
+    def __init__(
+        self,
+        bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+        group_id: str = "cuz-graph-writer",
+    ):
         self.driver = Neo4jClient.get_driver()
         self.resolver = DeterministicResolver()
         self.merger = NodeMerger(self.resolver)
         self.owner_linker = OwnerLinker()  # NOUVEAU (V3)
         # Repos vus avant leur propriétaire : OWNS rattrapé en fin de flux (reconcile_owns)
         self._pending_repos: dict[str, object] = {}
-        self.consumer = Consumer({
-            "bootstrap.servers": bootstrap_servers,
-            "group.id": group_id,
-            "auto.offset.reset": "earliest",
-            "enable.auto.commit": False,
-            # Membership statique : un redémarrage reprend la place sans rebalancing
-            # et sans membre fantôme. Une seule réplica par design.
-            "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID") or f"cuz-graph-writer-{socket.gethostname()}-{os.getpid()}",
-            "session.timeout.ms": 10000,
-        })
+        self.consumer = Consumer(
+            {
+                "bootstrap.servers": bootstrap_servers,
+                "group.id": group_id,
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": False,
+                # Membership statique : un redémarrage reprend la place sans rebalancing
+                # et sans membre fantôme. Une seule réplica par design.
+                "group.instance.id": os.getenv("CONSUMER_INSTANCE_ID")
+                or f"cuz-graph-writer-{socket.gethostname()}-{os.getpid()}",
+                "session.timeout.ms": 10000,
+            }
+        )
         self.producer = Producer({"bootstrap.servers": bootstrap_servers})
 
     def _native_attrs(self, attributes: dict, tags: dict | None = None) -> dict:
         """FIX-3 : extrait les clés promues, en filtrant les None
         (Neo4j n'accepte pas de propriété nulle sur += ).
         La criticité DICT est éclatée en criticality_D/I/C/T."""
-        native = {k: v for k, v in attributes.items()
-                  if k in NATIVE_PROMOTED_KEYS and v is not None}
+        native = {
+            k: v for k, v in attributes.items() if k in NATIVE_PROMOTED_KEYS and v is not None
+        }
         # Tag IaC promu en booléen natif (IaC-DRIFT-001) : les tags sont stockés
         # en JSON, un CONTAINS sur tags_json ne matcherait pas (espace après ':').
         if tags and tags.get("iac_managed") is not None:
@@ -133,7 +148,9 @@ class GraphWriter:
         sur cuz.quarantine.{tenant_id} (table PostgreSQL pas encore créée)."""
         logger.warning(
             "node quarantined (confidence %.2f < %.2f): %s",
-            event.node.confidence_score, CONFIDENCE_THRESHOLD, event.node.id,
+            event.node.confidence_score,
+            CONFIDENCE_THRESHOLD,
+            event.node.id,
         )
         self.producer.produce(
             topic=f"cuz.quarantine.{event.tenant_id}",
@@ -145,20 +162,20 @@ class GraphWriter:
     def _upsert_node(self, session, event: NormalizedEvent) -> None:
         node = self.merger.merge_or_create(event.node)
         params = {
-            "tenant_id":        node.tenant_id,
-            "external_id":      node.external_id or node.id,
-            "id":               node.id,
-            "node_type":        node.node_type.value,
-            "name":             node.name,
+            "tenant_id": node.tenant_id,
+            "external_id": node.external_id or node.id,
+            "id": node.id,
+            "node_type": node.node_type.value,
+            "name": node.name,
             "confidence_score": node.confidence_score,
-            "freshness_score":  node.freshness_score,
-            "sources":          node.sources,
-            "created_at":       node.created_at.isoformat(),
-            "updated_at":       node.updated_at.isoformat(),
-            "last_seen":        node.last_seen.isoformat(),
-            "attributes_json":  json.dumps(node.attributes),
-            "tags_json":        json.dumps(node.tags),
-            "native_attrs":     self._native_attrs(node.attributes, node.tags),  # FIX-3
+            "freshness_score": node.freshness_score,
+            "sources": node.sources,
+            "created_at": node.created_at.isoformat(),
+            "updated_at": node.updated_at.isoformat(),
+            "last_seen": node.last_seen.isoformat(),
+            "attributes_json": json.dumps(node.attributes),
+            "tags_json": json.dumps(node.tags),
+            "native_attrs": self._native_attrs(node.attributes, node.tags),  # FIX-3
         }
         session.run(UPSERT_NODE_CYPHER, **params)
 
@@ -190,17 +207,17 @@ class GraphWriter:
         """NOUVEAU (V3). Appelé pour les arêtes produites par le Normalizer
         (DEPENDS_ON) et pour l'arête OWNS résolue par OwnerLinker."""
         params = {
-            "tenant_id":        edge.tenant_id,
-            "id":               edge.id,
-            "edge_type":        edge.edge_type.value,
-            "source_id":        edge.source_id,
-            "target_id":        edge.target_id,
+            "tenant_id": edge.tenant_id,
+            "id": edge.id,
+            "edge_type": edge.edge_type.value,
+            "source_id": edge.source_id,
+            "target_id": edge.target_id,
             "confidence_score": edge.confidence_score,
-            "freshness_score":  edge.freshness_score,
-            "sources":          edge.sources,
-            "created_at":       edge.created_at.isoformat(),
-            "last_seen":        edge.last_seen.isoformat(),
-            "attributes_json":  json.dumps(edge.attributes),
+            "freshness_score": edge.freshness_score,
+            "sources": edge.sources,
+            "created_at": edge.created_at.isoformat(),
+            "last_seen": edge.last_seen.isoformat(),
+            "attributes_json": json.dumps(edge.attributes),
         }
         session.run(UPSERT_EDGE_CYPHER, **params)
 
@@ -263,7 +280,9 @@ class GraphWriter:
                     except Exception as e:
                         logger.error("GraphWriter error: %s", e)
                         if not self._dlq(tenant_id, msg.value(), f"write_error:{e}"):
-                            raise RuntimeError("DLQ non confirmée : arrêt sans validation d'offset") from e
+                            raise RuntimeError(
+                                "DLQ non confirmée : arrêt sans validation d'offset"
+                            ) from e
                     self.consumer.commit(message=msg)
                 self.reconcile_owns(session)
             finally:

@@ -12,6 +12,7 @@ Ressource réelle = nœud hors source terraform.
 Usage : python -m packages.connectors.terraform.baseline --tenant acmecorp
 Résultat écrit dans docs/drift-baseline.json.
 """
+
 import argparse
 import json
 import sys
@@ -29,6 +30,7 @@ FRESH_THRESHOLD = 0.8
 
 def _namespace(attrs_raw: str | None) -> str:
     import json as _json
+
     try:
         return (_json.loads(attrs_raw or "{}").get("namespace")) or "default"
     except _json.JSONDecodeError:
@@ -47,8 +49,11 @@ def build_keys(iac_rows: list[dict], real_rows: list[dict]) -> tuple[set[str], s
     for r in real_rows:
         if r["node_type"] == "STORAGE":
             real.add(f"STORAGE:{r['name']}")
-        elif r["node_type"] == "CONTAINER" and r.get("owner_deployment") \
-                and (r.get("freshness") or 0) >= FRESH_THRESHOLD:
+        elif (
+            r["node_type"] == "CONTAINER"
+            and r.get("owner_deployment")
+            and (r.get("freshness") or 0) >= FRESH_THRESHOLD
+        ):
             real.add(f"DEPLOYMENT:{_namespace(r['attrs'])}/{r['owner_deployment']}")
     return iac, real
 
@@ -59,21 +64,25 @@ def measure(tenant_id: str) -> dict:
             "MATCH (n:CuzNode {tenant_id: $t}) WHERE n.iac_managed = true "
             "RETURN n.node_type AS node_type, n.name AS name, n.attributes AS attrs, "
             "n.owner_deployment AS owner_deployment, n.freshness_score AS freshness",
-            t=tenant_id).data()
+            t=tenant_id,
+        ).data()
         real_rows = session.run(
             "MATCH (n:CuzNode {tenant_id: $t}) WHERE NOT 'terraform' IN n.sources "
             "AND n.node_type IN ['STORAGE', 'CONTAINER'] "
             "RETURN n.node_type AS node_type, n.name AS name, n.attributes AS attrs, "
             "n.owner_deployment AS owner_deployment, n.freshness_score AS freshness",
-            t=tenant_id).data()
+            t=tenant_id,
+        ).data()
     iac, real = build_keys(iac_rows, real_rows)
     result = compute_drift(iac, real)
-    result.update({
-        "tenant": tenant_id,
-        "scope": ["STORAGE", "DEPLOYMENT"],
-        "fresh_threshold": FRESH_THRESHOLD,
-        "measured_at": datetime.now(UTC).isoformat(),
-    })
+    result.update(
+        {
+            "tenant": tenant_id,
+            "scope": ["STORAGE", "DEPLOYMENT"],
+            "fresh_threshold": FRESH_THRESHOLD,
+            "measured_at": datetime.now(UTC).isoformat(),
+        }
+    )
     return result
 
 

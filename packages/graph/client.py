@@ -6,6 +6,7 @@ from neo4j import Driver, GraphDatabase
 
 load_dotenv()  # secrets via .env (CLAUDE.md) ; défauts alignés sur infra/docker
 
+
 class Neo4jClient:
     _driver: Driver | None = None
 

@@ -18,7 +18,9 @@ def test_csv_creates_one_business_process_node_per_row():
 
 def test_events_link_each_process_to_its_asset_by_supports():
     loader = BusinessProcessLoader("acmecorp")
-    resolve = _resolver({"Acme-Payment-SaaS": "n-pay", "Acme-HR-SaaS": "n-hr", "billing-api": "n-bill"})
+    resolve = _resolver(
+        {"Acme-Payment-SaaS": "n-pay", "Acme-HR-SaaS": "n-hr", "billing-api": "n-bill"}
+    )
     events, unresolved = loader.build_events(FIXTURE, resolve)
     edges = [e.edge for e in events if e.edge is not None]
     assert unresolved == []

@@ -9,6 +9,7 @@ Les arêtes sont publiées sur cuz.normalized (règle 1) : le GraphWriter les é
 
 Usage : python -m packages.connectors.kubernetes.correlate --tenant acmecorp
 """
+
 import argparse
 import json
 import logging
@@ -42,8 +43,13 @@ def _repo_segment(image: str) -> str:
     return path.rsplit("/", 1)[-1].lower()
 
 
-def correlate(pods: list[GraphNode], repos: list[GraphNode], vulns: dict[str, GraphNode],
-              storages: list[GraphNode], tenant_id: str) -> list[CuzEdge]:
+def correlate(
+    pods: list[GraphNode],
+    repos: list[GraphNode],
+    vulns: dict[str, GraphNode],
+    storages: list[GraphNode],
+    tenant_id: str,
+) -> list[CuzEdge]:
     """Fonction pure : calcule AFFECTS et EXPOSES à partir de nœuds déjà lus."""
     edges: list[CuzEdge] = []
     now = datetime.now(UTC)
@@ -57,29 +63,38 @@ def correlate(pods: list[GraphNode], repos: list[GraphNode], vulns: dict[str, Gr
                 vuln = vulns.get(vuln_id)
                 if vuln is None:
                     continue
-                edges.append(CuzEdge(
-                    tenant_id=tenant_id, edge_type=EdgeType.AFFECTS,
-                    source_id=vuln.id, target_id=pod.id,
-                    confidence_score=compute_confidence(["kubernetes", "gitea"]),
-                    freshness_score=compute_freshness(vuln_node_type(), now),
-                    sources=["kubernetes", "gitea"],
-                    attributes={"resolution_method": "image_name_repo_match", "image": image},
-                ))
+                edges.append(
+                    CuzEdge(
+                        tenant_id=tenant_id,
+                        edge_type=EdgeType.AFFECTS,
+                        source_id=vuln.id,
+                        target_id=pod.id,
+                        confidence_score=compute_confidence(["kubernetes", "gitea"]),
+                        freshness_score=compute_freshness(vuln_node_type(), now),
+                        sources=["kubernetes", "gitea"],
+                        attributes={"resolution_method": "image_name_repo_match", "image": image},
+                    )
+                )
         if pod.attributes.get("is_public_exposed") is True:
             for storage in storages:
-                edges.append(CuzEdge(
-                    tenant_id=tenant_id, edge_type=EdgeType.EXPOSES,
-                    source_id=pod.id, target_id=storage.id,
-                    confidence_score=compute_confidence(["kubernetes", "minio"]),
-                    freshness_score=compute_freshness(vuln_node_type(), now),
-                    sources=["kubernetes", "minio"],
-                    attributes={"resolution_method": "public_service_and_public_bucket"},
-                ))
+                edges.append(
+                    CuzEdge(
+                        tenant_id=tenant_id,
+                        edge_type=EdgeType.EXPOSES,
+                        source_id=pod.id,
+                        target_id=storage.id,
+                        confidence_score=compute_confidence(["kubernetes", "minio"]),
+                        freshness_score=compute_freshness(vuln_node_type(), now),
+                        sources=["kubernetes", "minio"],
+                        attributes={"resolution_method": "public_service_and_public_bucket"},
+                    )
+                )
     return edges
 
 
 def vuln_node_type():
     from packages.core.models.enums import NodeType
+
     return NodeType.VULNERABILITY
 
 
@@ -90,25 +105,41 @@ def _read_graph(session, tenant_id: str) -> tuple[list, list, dict, list]:
         except json.JSONDecodeError:
             return {}
 
-    pods = [GraphNode(r["id"], r["name"], "CONTAINER", parse(r["attrs"]))
-            for r in session.run(
-                "MATCH (p:CuzNode {tenant_id:$t, node_type:'CONTAINER'}) "
-                "WHERE 'kubernetes' IN p.sources "
-                "RETURN p.id AS id, p.name AS name, p.attributes AS attrs", t=tenant_id).data()]
+    pods = [
+        GraphNode(r["id"], r["name"], "CONTAINER", parse(r["attrs"]))
+        for r in session.run(
+            "MATCH (p:CuzNode {tenant_id:$t, node_type:'CONTAINER'}) "
+            "WHERE 'kubernetes' IN p.sources "
+            "RETURN p.id AS id, p.name AS name, p.attributes AS attrs",
+            t=tenant_id,
+        ).data()
+    ]
     repo_rows = session.run(
         """MATCH (r:CuzNode {tenant_id:$t, node_type:'REPOSITORY'})
            OPTIONAL MATCH (r)-[:CUZ_EDGE {edge_type:'DEPENDS_ON'}]->(v:CuzNode {node_type:'VULNERABILITY'})
-           RETURN r.id AS id, r.name AS name, collect(v.id) AS deps""", t=tenant_id).data()
-    repos = [GraphNode(r["id"], r["name"], "REPOSITORY", {}, tuple(d for d in r["deps"] if d))
-             for r in repo_rows]
-    vulns = {r["id"]: GraphNode(r["id"], r["name"], "VULNERABILITY", {})
-             for r in session.run(
-                 "MATCH (v:CuzNode {tenant_id:$t, node_type:'VULNERABILITY'}) "
-                 "RETURN v.id AS id, v.name AS name", t=tenant_id).data()}
-    storages = [GraphNode(r["id"], r["name"], "STORAGE", {})
-                for r in session.run(
-                    "MATCH (s:CuzNode {tenant_id:$t, node_type:'STORAGE', is_public:true}) "
-                    "RETURN s.id AS id, s.name AS name", t=tenant_id).data()]
+           RETURN r.id AS id, r.name AS name, collect(v.id) AS deps""",
+        t=tenant_id,
+    ).data()
+    repos = [
+        GraphNode(r["id"], r["name"], "REPOSITORY", {}, tuple(d for d in r["deps"] if d))
+        for r in repo_rows
+    ]
+    vulns = {
+        r["id"]: GraphNode(r["id"], r["name"], "VULNERABILITY", {})
+        for r in session.run(
+            "MATCH (v:CuzNode {tenant_id:$t, node_type:'VULNERABILITY'}) "
+            "RETURN v.id AS id, v.name AS name",
+            t=tenant_id,
+        ).data()
+    }
+    storages = [
+        GraphNode(r["id"], r["name"], "STORAGE", {})
+        for r in session.run(
+            "MATCH (s:CuzNode {tenant_id:$t, node_type:'STORAGE', is_public:true}) "
+            "RETURN s.id AS id, s.name AS name",
+            t=tenant_id,
+        ).data()
+    ]
     return pods, repos, vulns, storages
 
 
@@ -128,11 +159,19 @@ def main() -> int:
     producer = EventProducer()
     for edge in edges:
         event = NormalizedEvent(
-            event_id=str(uuid.uuid4()), raw_event_id=f"k8s-correlate-{uuid.uuid4()}",
-            tenant_id=args.tenant, source="kubernetes", event_type=EventType.EDGE_CREATED,
-            timestamp=datetime.now(UTC), edge=edge)
-        producer.producer.produce(topic=f"cuz.normalized.{args.tenant}", key=event.raw_event_id.encode(),
-                                  value=event.model_dump_json().encode())
+            event_id=str(uuid.uuid4()),
+            raw_event_id=f"k8s-correlate-{uuid.uuid4()}",
+            tenant_id=args.tenant,
+            source="kubernetes",
+            event_type=EventType.EDGE_CREATED,
+            timestamp=datetime.now(UTC),
+            edge=edge,
+        )
+        producer.producer.produce(
+            topic=f"cuz.normalized.{args.tenant}",
+            key=event.raw_event_id.encode(),
+            value=event.model_dump_json().encode(),
+        )
     producer.flush()
     logger.info("corrélation : %d arête(s) AFFECTS/EXPOSES publiée(s)", len(edges))
     return 0
