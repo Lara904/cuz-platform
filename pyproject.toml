@@ -32,7 +32,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ['tests', 'packages']
+testpaths = ['tests', 'packages', 'services']
 addopts = '-v --tb=short'
 asyncio_mode = 'auto'
 

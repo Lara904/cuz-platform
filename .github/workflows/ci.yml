@@ -26,13 +26,13 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
-      - run: ruff check packages/
-      - run: ruff format --check packages/
+      - run: ruff check packages/ services/
+      - run: ruff format --check packages/ services/
       - run: mypy packages/ --exclude 'packages/.*/tests/.*'
 
   # ─────────────────────────────────────────────────────────────────────────
   # Job 2 — Tests unitaires
-  # Chemin corrigé : packages/ (pas tests/unit/ qui n'existe pas encore)
+  # packages/ ET services/ (l'API n'était pas testée en CI)
   # ─────────────────────────────────────────────────────────────────────────
   unit-tests:
     name: Unit Tests
@@ -49,7 +49,7 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
-      - run: pytest packages/ --ignore=packages/graph/tests/ -v --tb=short --cov=packages --cov-report=xml
+      - run: pytest packages/ services/ --ignore=packages/graph/tests/ -v --tb=short --cov=packages --cov=services --cov-report=xml
 
       - uses: actions/upload-artifact@v4
         with:

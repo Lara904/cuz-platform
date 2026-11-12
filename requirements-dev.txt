@@ -10,3 +10,12 @@ confluent-kafka>=2.3
 minio>=7.2
 python-dotenv>=1.0
 kubernetes>=30
+# API (services/api) : tests de services/ et mypy suivent ces imports
+fastapi>=0.115
+python-multipart>=0.0.12
+python-jose>=3.3
+asyncpg>=0.29
+redis>=5.0
+# Résolution d'entités probabiliste (P2.5)
+splink>=5.0
+pandas>=2.0

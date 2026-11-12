@@ -195,7 +195,7 @@ class ProbabilisticResolver:
         assert self.linker is not None, "modèle non chargé"
         predictions = self.linker.inference.predict(
             threshold_match_probability=HUMAN_REVIEW_LOWER_THRESHOLD
-        ).as_pandas_dataframe()
+        ).as_pandas_dataframe()  # type: ignore[no-untyped-call, unused-ignore]  # splink non typé
         if predictions.empty:
             return predictions
         source = df.set_index("unique_id")["source"]
@@ -263,7 +263,7 @@ def retrain_from_merged_pairs(
     target = path or model_path(resolver.tenant_id)
     resolver.load_model(df, target)
     assert resolver.linker is not None
-    predictions = resolver.linker.inference.predict().as_pandas_dataframe()
+    predictions = resolver.linker.inference.predict().as_pandas_dataframe()  # type: ignore[no-untyped-call, unused-ignore]  # splink non typé
     wanted = {frozenset(p) for p in merged_pairs}
     labelled = predictions[
         [
