@@ -88,7 +88,8 @@ RETURN r.id as edge_id
 """
 
 class GraphWriter:
-    def __init__(self, bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")):
+    def __init__(self, bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                 group_id: str = "cuz-graph-writer"):
         self.driver = Neo4jClient.get_driver()
         self.resolver = DeterministicResolver()
         self.merger = NodeMerger(self.resolver)
@@ -97,7 +98,7 @@ class GraphWriter:
         self._pending_repos: dict[str, object] = {}
         self.consumer = Consumer({
             "bootstrap.servers": bootstrap_servers,
-            "group.id": "cuz-graph-writer",
+            "group.id": group_id,
             "auto.offset.reset": "earliest",
             "enable.auto.commit": False,
             # Membership statique : un redémarrage reprend la place sans rebalancing

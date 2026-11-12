@@ -7,6 +7,8 @@ cluster partent dans le même message, donc leurs arêtes ne dépendent pas de l
 d'arrivée entre messages.
 """
 import asyncio
+import logging
+import threading
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -15,6 +17,10 @@ from kubernetes import client, config, watch
 
 from packages.core.interfaces.connector import IConnector
 from packages.core.models.events import EventType, RawEvent
+
+logger = logging.getLogger(__name__)
+
+WATCH_QUEUE_SIZE = 1000  # borne la mémoire : au-delà, le thread du watch attend (contre-pression)
 
 
 def _owner_deployment(pod) -> str | None:
@@ -57,6 +63,27 @@ class KubernetesConnector(IConnector):
             for s in self.core_v1.list_namespaced_service(namespace).items
         ]
 
+    def _pod_record(self, pod, namespace: str, namespace_uid: str, services: list[dict]) -> dict:
+        """Enregistrement d'un pod, identique pour pull_full et le watch : le normalizer n'a qu'une forme."""
+        containers = pod.spec.containers or []
+        return {
+            "uid": pod.metadata.uid,
+            "name": pod.metadata.name,
+            "namespace": namespace,
+            "namespace_uid": namespace_uid,
+            "cluster_name": self.cluster_name,
+            "node_name": pod.spec.node_name,
+            "privileged": any(c.security_context and c.security_context.privileged
+                              for c in containers),
+            "run_as_root": any(c.security_context and c.security_context.run_as_user == 0
+                               for c in containers),
+            "images": [c.image for c in containers],
+            "labels": pod.metadata.labels or {},
+            "owner_deployment": _owner_deployment(pod),
+            "is_public_exposed": self._pod_is_public_exposed(pod, services),
+            "phase": pod.status.phase,
+        }
+
     async def pull_full(self) -> list[RawEvent]:
         events: list[RawEvent] = [self._wrap("cluster", {"name": self.cluster_name})]
         for node in self.core_v1.list_node().items:  # nœuds du cluster → SERVER
@@ -68,43 +95,51 @@ class KubernetesConnector(IConnector):
             events.append(self._wrap("namespace", ns_raw))
             services = self._list_services(ns_name)
             for pod in self.core_v1.list_namespaced_pod(ns_name).items:
-                containers = pod.spec.containers or []
-                events.append(self._wrap("pod", {
-                    "uid": pod.metadata.uid,
-                    "name": pod.metadata.name,
-                    "namespace": ns_name,
-                    "namespace_uid": ns.metadata.uid,
-                    "cluster_name": self.cluster_name,
-                    "node_name": pod.spec.node_name,
-                    "privileged": any(c.security_context and c.security_context.privileged
-                                      for c in containers),
-                    "run_as_root": any(c.security_context and c.security_context.run_as_user == 0
-                                       for c in containers),
-                    "images": [c.image for c in containers],
-                    "labels": pod.metadata.labels or {},
-                    "owner_deployment": _owner_deployment(pod),
-                    "is_public_exposed": self._pod_is_public_exposed(pod, services),
-                    "phase": pod.status.phase,
-                }))
+                events.append(self._wrap("pod", self._pod_record(pod, ns_name, ns.metadata.uid, services)))
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:
-        """Référence single-stream. P2.7 la remplacera par des informers multi-ressources.
-        Note : le flux sync de `watch` bloque la boucle appelante."""
-        w = watch.Watch()
-        while True:
-            try:
-                for event in w.stream(self.core_v1.list_pod_for_all_namespaces, timeout_seconds=300):
-                    pod = event["object"]
-                    yield self._wrap("pod", {
-                        "uid": pod.metadata.uid,
-                        "name": pod.metadata.name,
-                        "namespace": pod.metadata.namespace,
-                        "cluster_name": self.cluster_name,
-                        "event_type_k8s": event["type"],
-                    })
-            except Exception:
-                await asyncio.sleep(5)
+        """Watch des pods en temps réel. Le watch du client Kubernetes est synchrone : il tourne dans un
+        thread et alimente une file bornée, sinon il gèlerait tous les autres flux de la boucle asyncio.
+        Chaque événement porte l'enregistrement COMPLET du pod (même forme que pull_full).
+        DELETED n'est pas publié : le graphe ne supprime jamais de nœud, la fraîcheur décroît
+        (stale-detection P1.14). Un watch interrompu repart après 5 s ; le replay ADDED est idempotent."""
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[RawEvent] = asyncio.Queue(maxsize=WATCH_QUEUE_SIZE)
+        stop = threading.Event()
+        watcher = watch.Watch()
+        namespace_uids: dict[str, str] = {}
+
+        def namespace_uid(name: str) -> str:
+            if name not in namespace_uids:
+                namespace_uids[name] = self.core_v1.read_namespace(name).metadata.uid
+            return namespace_uids[name]
+
+        def run_watch() -> None:
+            while not stop.is_set():
+                try:
+                    for event in watcher.stream(self.core_v1.list_pod_for_all_namespaces,
+                                                timeout_seconds=60):
+                        if stop.is_set():
+                            return
+                        if event["type"] not in ("ADDED", "MODIFIED"):
+                            continue
+                        pod = event["object"]
+                        ns = pod.metadata.namespace
+                        record = self._pod_record(pod, ns, namespace_uid(ns), self._list_services(ns))
+                        asyncio.run_coroutine_threadsafe(
+                            queue.put(self._wrap("pod", record)), loop).result()
+                except Exception as e:  # coupure API, 410 Gone... : on repart
+                    logger.warning("watch pods interrompu (%s), reprise dans 5 s", e)
+                    stop.wait(5)
+
+        threading.Thread(target=run_watch, name="k8s-pod-watch", daemon=True).start()
+        try:
+            while True:
+                yield await queue.get()
+        finally:
+            stop.set()
+            watcher.stop()
 
     def _wrap(self, object_type: str, data: dict) -> RawEvent:
         return RawEvent(

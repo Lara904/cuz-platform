@@ -170,3 +170,106 @@ def test_owner_deployment_from_replicaset_name():
     assert _owner_deployment(pod) == "backend"
     naked = SimpleNamespace(metadata=SimpleNamespace(owner_references=None))
     assert _owner_deployment(naked) is None
+
+
+# ── P2.7 : watch temps réel ──────────────────────────────────────────────────
+
+def _watch_setup(monkeypatch, events: list[tuple[str, object]]):
+    """FakeCore + faux Watch qui rejoue `events` à chaque (re)démarrage du stream."""
+    _fake_api(monkeypatch)
+    pod = connector_mod.client.CoreV1Api().list_namespaced_pod("production").items[0]
+    pod.metadata.namespace = "production"
+
+    class FakeCoreWatch(connector_mod.client.CoreV1Api):
+        def read_namespace(self, name):
+            return SimpleNamespace(metadata=SimpleNamespace(uid="ns-uid-production"))
+
+        def list_pod_for_all_namespaces(self, **kwargs):  # passé au Watch, jamais appelé en vrai
+            raise AssertionError
+
+    class FakeWatch:
+        def stream(self, fn, timeout_seconds=None):
+            for kind in events:
+                yield {"type": kind[0], "object": kind[1] or pod}
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(connector_mod.client, "CoreV1Api", FakeCoreWatch)
+    monkeypatch.setattr(connector_mod.watch, "Watch", FakeWatch)
+    return pod
+
+
+def _take(conn, n: int):
+    async def go():
+        got = []
+        stream = conn.subscribe_events()
+        try:
+            async for event in stream:
+                got.append(event)
+                if len(got) == n:
+                    break
+        finally:
+            await stream.aclose()
+        return got
+    return asyncio.run(asyncio.wait_for(go(), timeout=5))
+
+
+def test_watch_emits_full_pod_record_same_shape_as_pull_full(monkeypatch):
+    _watch_setup(monkeypatch, [("ADDED", None)])
+    conn = KubernetesConnector(TENANT, kubeconfig_path="unused")
+    watched = _take(conn, 1)[0].raw_data
+    full = next(e.raw_data for e in asyncio.run(conn.pull_full()) if e.raw_data["object_type"] == "pod")
+    assert watched == full  # le normalizer n'a qu'une forme (namespace_uid, images, privileged...)
+    assert watched["namespace_uid"] == "ns-uid-production"
+
+
+def test_watch_event_is_normalizable_without_dlq(monkeypatch):
+    from packages.ingestion.normalizer import Normalizer
+    _watch_setup(monkeypatch, [("MODIFIED", None)])
+    raw = _take(KubernetesConnector(TENANT, kubeconfig_path="unused"), 1)[0]
+    normalized = Normalizer().normalize(raw)
+    assert any(e.node and e.node.name == "legacy-job" for e in normalized)
+    assert any(e.edge for e in normalized)
+
+
+def test_watch_ignores_deleted_and_bookmark_events(monkeypatch):
+    _watch_setup(monkeypatch, [("DELETED", None), ("BOOKMARK", None), ("ADDED", None)])
+    events = _take(KubernetesConnector(TENANT, kubeconfig_path="unused"), 2)
+    assert all(e.raw_data["object_type"] == "pod" for e in events)  # jamais de suppression de nœud
+
+
+def test_watch_does_not_block_the_event_loop(monkeypatch):
+    """Le flux K8s est synchrone : s'il tournait dans la boucle, une autre tâche ne progresserait pas."""
+    import time
+
+    _watch_setup(monkeypatch, [("ADDED", None)])
+
+    class SlowWatch:
+        def stream(self, fn, timeout_seconds=None):
+            time.sleep(0.5)  # watch bloquant, comme le vrai client
+            yield {"type": "ADDED", "object": connector_mod.client.CoreV1Api().list_namespaced_pod("x").items[0]}
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(connector_mod.watch, "Watch", SlowWatch)
+    conn = KubernetesConnector(TENANT, kubeconfig_path="unused")
+
+    async def go():
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                ticks += 1
+                await asyncio.sleep(0.01)
+
+        task = asyncio.create_task(ticker())
+        stream = conn.subscribe_events()
+        await stream.__anext__()
+        await stream.aclose()
+        task.cancel()
+        return ticks
+
+    assert asyncio.run(asyncio.wait_for(go(), timeout=5)) > 10  # la boucle a continué pendant le watch

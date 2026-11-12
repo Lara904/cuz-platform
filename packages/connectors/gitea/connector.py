@@ -11,6 +11,8 @@ import httpx
 from packages.core.interfaces.connector import IConnector
 from packages.core.models.events import EventType, RawEvent
 
+WEBHOOK_EVENTS = ["push", "create", "delete", "pull_request"]
+
 
 class GiteaConnector(IConnector):
     def __init__(self, tenant_id: str, base_url: str, admin_token: str, org: str = "acmecorp"):
@@ -75,54 +77,69 @@ class GiteaConnector(IConnector):
     async def _register_webhook(
         self, client: httpx.AsyncClient, owner: str, repo: str, callback_url: str
     ) -> bool:
+        """Enregistre (ou met à jour) le webhook. Gitea ne signe (X-Gitea-Signature) que si le hook a
+        un secret : sans GITEA_WEBHOOK_SECRET le webhook est créé non signé, et l'endpoint CUz le refuse
+        (échec fermé). L'API ne renvoie jamais le secret : avec un secret configuré, un hook existant
+        est donc toujours mis à jour (PATCH idempotent)."""
+        secret = os.getenv("GITEA_WEBHOOK_SECRET", "")
+        config = {"url": callback_url, "content_type": "json", **({"secret": secret} if secret else {})}
         existing = await client.get(f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks")
         hooks = existing.json() if existing.status_code == 200 else []
-        if any(h.get("config", {}).get("url") == callback_url for h in hooks):
-            return True
-        payload = {
-            "active": True,
-            "config": {"url": callback_url, "content_type": "json"},
-            "events": ["push", "create", "delete", "pull_request"],
-            "type": "gitea",
-        }
+        current = next((h for h in hooks if h.get("config", {}).get("url") == callback_url), None)
+        if current is not None:
+            if not secret:
+                return True
+            r = await client.patch(
+                f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks/{current['id']}",
+                json={"config": config, "events": WEBHOOK_EVENTS, "active": True})
+            return r.status_code in (200, 201)
+        payload = {"active": True, "config": config, "events": WEBHOOK_EVENTS, "type": "gitea"}
         r = await client.post(f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks", json=payload)
         return r.status_code in (200, 201)
+
+    async def _repo_event(self, client: httpx.AsyncClient, repo: dict) -> RawEvent:
+        """RawEvent « repository » d'un dépôt : dépendances lues dans package.json / requirements.txt."""
+        owner, name = repo["owner"]["login"], repo["name"]
+        pkg_json = await self._get_file(client, owner, name, "package.json")
+        reqs_txt = await self._get_file(client, owner, name, "requirements.txt")
+        return RawEvent(
+            event_id=str(uuid.uuid4()),
+            tenant_id=self.tenant_id,
+            source="gitea",
+            event_type=EventType.NODE_CREATED,
+            timestamp=datetime.now(UTC),
+            raw_data={
+                "object_type": "repository",
+                "repo_id": str(repo["id"]),
+                "full_name": repo["full_name"],
+                "name": name,
+                "owner": owner,
+                "private": repo.get("private", True),
+                "default_branch": repo.get("default_branch", "main"),
+                "dependencies": self._parse_dependencies(pkg_json or "", reqs_txt or ""),
+            },
+        )
+
+    async def pull_repo(self, owner: str, name: str) -> RawEvent | None:
+        """Relit un seul dépôt (appelé par le webhook de push). None si le dépôt n'existe plus."""
+        async with httpx.AsyncClient(headers=self.headers, timeout=30) as client:
+            r = await client.get(f"{self.base_url}/api/v1/repos/{owner}/{name}")
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return await self._repo_event(client, r.json())
 
     async def pull_full(self) -> list[RawEvent]:
         events = []
         webhook_url = os.getenv("CUZ_WEBHOOK_URL", "http://localhost:8000/api/v1/webhooks/gitea")
         async with httpx.AsyncClient(headers=self.headers, timeout=30) as client:
-            repos = await self._get_repos(client)
-            for repo in repos:
-                owner = repo["owner"]["login"]
-                name = repo["name"]
-                pkg_json = await self._get_file(client, owner, name, "package.json")
-                reqs_txt = await self._get_file(client, owner, name, "requirements.txt")
-                deps = self._parse_dependencies(pkg_json or "", reqs_txt or "")
-                await self._register_webhook(client, owner, name, webhook_url)
-                events.append(
-                    RawEvent(
-                        event_id=str(uuid.uuid4()),
-                        tenant_id=self.tenant_id,
-                        source="gitea",
-                        event_type=EventType.NODE_CREATED,
-                        timestamp=datetime.now(UTC),
-                        raw_data={
-                            "object_type": "repository",
-                            "repo_id": str(repo["id"]),
-                            "full_name": repo["full_name"],
-                            "name": name,
-                            "owner": owner,
-                            "private": repo.get("private", True),
-                            "default_branch": repo.get("default_branch", "main"),
-                            "dependencies": deps,
-                        },
-                    )
-                )
+            for repo in await self._get_repos(client):
+                events.append(await self._repo_event(client, repo))
+                await self._register_webhook(client, repo["owner"]["login"], repo["name"], webhook_url)
         return events
 
     async def subscribe_events(self) -> AsyncIterator[RawEvent]:
         while True:
             for e in await self.pull_full():
                 yield e
-            await asyncio.sleep(86400)  # scan quotidien
+            await asyncio.sleep(86400)  # scan quotidien : filet de sécurité, le temps réel passe par le webhook

@@ -6,6 +6,7 @@ tests/fixtures/defender_alerts_sim (fictif). Seuls l'URL et les credentials chan
 RÈGLE 1 : aucune écriture dans Neo4j, tout passe par Redpanda.
 """
 import asyncio
+import os
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -14,6 +15,9 @@ import httpx
 
 from packages.core.interfaces.connector import IConnector
 from packages.core.models.events import EventType, RawEvent
+
+# Pire latence cloud ≈ intervalle de poll : 30 s tient le critère P2.7 (< 2 min) avec de la marge.
+POLL_SECONDS = float(os.getenv("CLOUD_DETECTION_POLL_SECONDS", "30"))
 
 
 class CloudDetectionConnector(IConnector):
@@ -55,7 +59,7 @@ class CloudDetectionConnector(IConnector):
                     cursor = payload.get("cursor", cursor)
                     for alert in payload.get("alerts", []):
                         yield self._wrap("alert", alert)
-            await asyncio.sleep(120)  # poll toutes les 2 min (P2.7 réduira ça)
+            await asyncio.sleep(POLL_SECONDS)
 
     def _wrap(self, object_type: str, data: dict) -> RawEvent:
         return RawEvent(
