@@ -12,8 +12,8 @@ from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 
 from packages.graph.client import Neo4jClient
-from services.api.middleware.auth import Role, TokenData, require_role, require_tenant_scope
 from services.api import audit
+from services.api.middleware.auth import Role, TokenData, require_role, require_tenant_scope
 from services.api.routers.findings import _load
 
 router = APIRouter(

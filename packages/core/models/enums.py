@@ -60,4 +60,4 @@ class EdgeType(StrEnum):
     PART_OF = "PART_OF"
     GOVERNED_BY = "GOVERNED_BY"
     COVERS = "COVERS"
-    OWNS = "OWNS" 
+    OWNS = "OWNS"

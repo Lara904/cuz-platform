@@ -1,5 +1,5 @@
 # packages/entity-resolution/resolver.py
-from typing import Dict, List, Optional, Tuple
+
 from packages.core.models.node import CuzNode
 
 STRONG_ID_KEYS = {
@@ -14,11 +14,11 @@ class DeterministicResolver:
 
     def __init__(self):
         # index: (tenant_id, source, external_id) -> CuzNode.id
-        self._index: Dict[Tuple[str, str, str], str] = {}
+        self._index: dict[tuple[str, str, str], str] = {}
         # stockage: node.id -> CuzNode
-        self._store: Dict[str, CuzNode] = {}
+        self._store: dict[str, CuzNode] = {}
 
-    def _get_keys(self, node: CuzNode) -> List[Tuple[str, str, str]]:
+    def _get_keys(self, node: CuzNode) -> list[tuple[str, str, str]]:
         # Toutes les clés fortes du nœud : une fusion multi-sources doit être
         # reconnue par chacune de ses sources, pas seulement la première.
         return [
@@ -27,7 +27,7 @@ class DeterministicResolver:
             if ext_id and source in STRONG_ID_KEYS
         ]
 
-    def resolve(self, node: CuzNode) -> Tuple[Optional[str], bool]:
+    def resolve(self, node: CuzNode) -> tuple[str | None, bool]:
         """Retourne (existing_node_id | None, is_duplicate)."""
         for key in self._get_keys(node):
             if key in self._index:
@@ -40,5 +40,5 @@ class DeterministicResolver:
         for key in self._get_keys(node):
             self._index[key] = node.id
 
-    def get(self, node_id: str) -> Optional[CuzNode]:
+    def get(self, node_id: str) -> CuzNode | None:
         return self._store.get(node_id)

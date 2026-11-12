@@ -3,10 +3,10 @@ services/api/middleware/logging.py
 Middleware de logging structuré pour toutes les requêtes HTTP.
 Chaque requête produit une ligne JSON avec : méthode, path, status, durée, IP.
 """
+import logging
 import time
 import uuid
-import logging
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware

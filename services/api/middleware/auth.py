@@ -14,9 +14,8 @@ JWT_SECRET_KEY (défini dans .env). En prod, la validation se fait contre
 Azure AD / OIDC externe.
 """
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -32,7 +31,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
 # ── Rôles RBAC ────────────────────────────────────────────────────────────────
-class Role(str, Enum):
+class Role(str, Enum):  # noqa: UP042 — str()/format() inchangés vs StrEnum
     """
     Hiérarchie des rôles RBAC de CUz.
 
@@ -60,14 +59,14 @@ ROLE_HIERARCHY: dict[Role, int] = {
 class TokenData(BaseModel):
     sub: str  # username
     role: Role
-    tenant_id: Optional[str] = None  # None pour tenant_admin (cross-tenant)
-    exp: Optional[datetime] = None
+    tenant_id: str | None = None  # None pour tenant_admin (cross-tenant)
+    exp: datetime | None = None
 
 
 # ── Génération de token (mock dev) ────────────────────────────────────────────
-def create_access_token(sub: str, role: Role, tenant_id: Optional[str] = None) -> str:
+def create_access_token(sub: str, role: Role, tenant_id: str | None = None) -> str:
     """Génère un JWT signé. Utilisé pour le mock auth en développement."""
-    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + timedelta(minutes=JWT_EXPIRE_MINUTES)
     payload = {
         "sub": sub,
         "role": role.value,
@@ -94,8 +93,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         role = Role(role_str)
         tenant_id = payload.get("tenant_id")
         return TokenData(sub=sub, role=role, tenant_id=tenant_id)
-    except (JWTError, ValueError):
-        raise credentials_exception
+    except (JWTError, ValueError) as exc:
+        raise credentials_exception from exc
 
 
 # ── Dépendances RBAC ─────────────────────────────────────────────────────────

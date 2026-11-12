@@ -15,8 +15,7 @@ Le provisioning automatique (contrainte Neo4j, topic Kafka) est prévu
 mais implémenté en stub pour P0.8 — il sera complété en P1.
 """
 import os
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -81,7 +80,7 @@ async def _provision_tenant(tenant_id: str):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[TenantResponse])
+@router.get("/", response_model=list[TenantResponse])
 async def list_tenants(
     current_user: TokenData = Depends(require_role(Role.TENANT_ADMIN)),
 ):
@@ -105,7 +104,7 @@ async def create_tenant(
     - L'entrée PostgreSQL pour l'audit trail
     """
     pool = await get_pool()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     async with pool.acquire() as conn:
         existing = await conn.fetchrow("SELECT id FROM tenants WHERE id = $1", payload.id)
         if existing:
@@ -159,7 +158,7 @@ async def update_tenant(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
 
     pool = await get_pool()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     updates = {}
     if payload.name is not None:

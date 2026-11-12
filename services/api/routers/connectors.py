@@ -13,8 +13,7 @@ Endpoints :
 """
 import os
 import uuid
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,7 +24,6 @@ from services.api.models.connector import (
     ConnectorResponse,
     ConnectorStatus,
     ConnectorTestResult,
-    ConnectorUpdate,
 )
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/connectors", tags=["connectors"])
@@ -77,7 +75,7 @@ def row_to_connector(row: asyncpg.Record) -> ConnectorResponse:
     )
 
 
-@router.get("/", response_model=List[ConnectorResponse])
+@router.get("/", response_model=list[ConnectorResponse])
 async def list_connectors(
     tenant_id: str,
     current_user: TokenData = Depends(require_role(Role.VIEWER)),
@@ -100,7 +98,7 @@ async def create_connector(
     _check_tenant_scope(current_user, tenant_id)
     pool = await get_pool()
     connector_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     import json
     async with pool.acquire() as conn:
         row = await conn.fetchrow(

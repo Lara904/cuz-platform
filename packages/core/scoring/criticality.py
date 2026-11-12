@@ -4,14 +4,13 @@
 Aucune pondération par contexte de conformité n'est calculée ici : c'est un jugement
 humain, documenté à part (docs/dict-convention.md).
 """
-from typing import Optional
 
 from packages.core.models.node import CuzNode
 
 DICT_AXES = ("D", "I", "C", "T")
 
 
-def node_criticality_order(node: CuzNode) -> Optional[int]:
+def node_criticality_order(node: CuzNode) -> int | None:
     """Max des axes DICT renseignés (1-4), None si rien n'est renseigné.
     Ne jamais interpoler ni supposer une valeur par défaut."""
     dict_attrs = node.attributes.get("criticality")
@@ -22,7 +21,7 @@ def node_criticality_order(node: CuzNode) -> Optional[int]:
     return max(values) if values else None
 
 
-def max_criticality_along_path(node_criticalities: list[Optional[int]]) -> Optional[int]:
+def max_criticality_along_path(node_criticalities: list[int | None]) -> int | None:
     """Propage la criticité max le long d'un chemin DEPENDS_ON / SUPPORTS.
     Simple max : pas de pondération, pas de décroissance avec la distance."""
     known = [c for c in node_criticalities if c is not None]

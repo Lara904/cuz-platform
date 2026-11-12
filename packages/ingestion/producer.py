@@ -1,4 +1,5 @@
 import os
+
 # packages/ingestion/producer.py
 from confluent_kafka import Producer
 

@@ -1,7 +1,5 @@
 # packages/graph/tests/test_graph_writer.py
-import pytest, json
 from packages.graph.client import Neo4jClient
-from packages.core.models.enums import NodeType
 
 TENANT = "acmecorp"
 

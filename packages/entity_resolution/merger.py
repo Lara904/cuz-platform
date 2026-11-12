@@ -1,9 +1,10 @@
 # packages/entity-resolution/merger.py
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
+
 from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
 from packages.entity_resolution.resolver import DeterministicResolver
+
 
 class NodeMerger:
     def __init__(self, resolver: DeterministicResolver):
@@ -21,7 +22,7 @@ class NodeMerger:
 
     def _merge(self, existing: CuzNode, incoming: CuzNode) -> CuzNode:
         """Newest wins pour les attributs. Union pour sources/external_ids."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         merged_ext = {**existing.external_ids, **incoming.external_ids}
         merged_sources = list(set(existing.sources + incoming.sources))
         merged_attrs = {**existing.attributes, **incoming.attributes}

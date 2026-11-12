@@ -15,13 +15,13 @@ Ce n'est pas un mécanisme d'entity resolution probabiliste (réservé à
 Splink en P2.5) : c'est un rapprochement déterministe sur une convention
 documentée, dans le même esprit que le reste de P1.6."""
 import json
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-from packages.core.models.node import CuzNode
+
 from packages.core.models.edge import CuzEdge
 from packages.core.models.enums import EdgeType
+from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
-from datetime import datetime, timezone
 
 DEFAULT_OWNER_MAPPING_PATH = Path(__file__).resolve().parents[2] / "config" / "gitea_owner_mapping.json"
 
@@ -53,7 +53,7 @@ class OwnerLinker:
         local_part = upn.split("@")[0].lower()
         self._users[(user_node.tenant_id, local_part)] = user_node
 
-    def resolve_owns_edge(self, repo_node: CuzNode) -> Optional[CuzEdge]:
+    def resolve_owns_edge(self, repo_node: CuzNode) -> CuzEdge | None:
         """Retourne une CuzEdge OWNS (user -> repo) si le owner du repo
         correspond à un USER déjà enregistré du même tenant, None sinon
         (ne pas fabriquer un lien sur une correspondance incertaine)."""
@@ -63,7 +63,7 @@ class OwnerLinker:
         user_node = self._users.get((repo_node.tenant_id, owner.lower()))
         if not user_node:
             return None
-        last_seen = datetime.now(timezone.utc)
+        last_seen = datetime.now(UTC)
         return CuzEdge(
             tenant_id=repo_node.tenant_id,
             edge_type=EdgeType.OWNS,

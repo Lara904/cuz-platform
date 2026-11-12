@@ -4,10 +4,10 @@ Rate limiting par IP via Redis (sliding window).
 Limite par défaut : 100 requêtes / minute par IP.
 Les health checks sont exemptés.
 """
+import logging
 import os
 import time
-import logging
-from typing import Callable
+from collections.abc import Callable
 
 import redis.asyncio as aioredis
 from fastapi import Request, Response

@@ -1,13 +1,13 @@
 # packages/graph/client.py
 import os
-from neo4j import GraphDatabase, Driver
-from typing import Optional
+
 from dotenv import load_dotenv
+from neo4j import Driver, GraphDatabase
 
 load_dotenv()  # secrets via .env (CLAUDE.md) ; défauts alignés sur infra/docker
 
 class Neo4jClient:
-    _driver: Optional[Driver] = None
+    _driver: Driver | None = None
 
     @classmethod
     def get_driver(cls) -> Driver:

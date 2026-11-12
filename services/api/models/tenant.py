@@ -4,12 +4,11 @@ Schémas Pydantic pour la gestion des tenants.
 """
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
 
-class TenantStatus(str, Enum):
+class TenantStatus(str, Enum):  # noqa: UP042 — str()/format() inchangés vs StrEnum
     ACTIVE = "active"
     SUSPENDED = "suspended"
     PENDING = "pending"
@@ -25,19 +24,19 @@ class TenantCreate(BaseModel):
         examples=["stellantis-financial"],
     )
     name: str = Field(..., min_length=2, max_length=128, description="Nom lisible du tenant")
-    description: Optional[str] = Field(None, max_length=512)
+    description: str | None = Field(None, max_length=512)
 
 
 class TenantUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=2, max_length=128)
-    description: Optional[str] = Field(None, max_length=512)
-    status: Optional[TenantStatus] = None
+    name: str | None = Field(None, min_length=2, max_length=128)
+    description: str | None = Field(None, max_length=512)
+    status: TenantStatus | None = None
 
 
 class TenantResponse(BaseModel):
     id: str
     name: str
-    description: Optional[str]
+    description: str | None
     status: TenantStatus
     created_at: datetime
     updated_at: datetime

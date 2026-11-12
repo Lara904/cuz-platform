@@ -38,7 +38,7 @@ def test_runner_drops_cloud_alert_duplicating_cypher_rule(monkeypatch):
     class FakeSession:
         def run(self, *a, **k):
             class R:
-                def data(self_inner):
+                def data(self):
                     return [
                         {"id": "cloud_detection:a1", "name": "dup", "attributes":
                          '{"rule_id": "IAM-001", "severity": "HIGH"}'},
@@ -50,9 +50,9 @@ def test_runner_drops_cloud_alert_duplicating_cypher_rule(monkeypatch):
     class FakeDriver:
         def session(self):
             class Ctx:
-                def __enter__(self_inner):
+                def __enter__(self):
                     return FakeSession()
-                def __exit__(self_inner, *a):
+                def __exit__(self, *a):
                     return False
             return Ctx()
 

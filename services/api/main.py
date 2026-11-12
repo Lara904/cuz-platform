@@ -7,13 +7,25 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.api.middleware.logging import LoggingMiddleware
-from services.api.middleware.rate_limit import RateLimitMiddleware
-from services.api.routers import auth, connectors, coverage, dashboard, entity_resolution, exports, findings, graph, health, tenants, webhooks
-from services.api.routers.tenants import init_db as init_tenants_db
-from services.api.routers.connectors import init_db as init_connectors_db
 from services.api.audit import init_audit_db
 from services.api.er_audit import init_er_db
+from services.api.middleware.logging import LoggingMiddleware
+from services.api.middleware.rate_limit import RateLimitMiddleware
+from services.api.routers import (
+    auth,
+    connectors,
+    coverage,
+    dashboard,
+    entity_resolution,
+    exports,
+    findings,
+    graph,
+    health,
+    tenants,
+    webhooks,
+)
+from services.api.routers.connectors import init_db as init_connectors_db
+from services.api.routers.tenants import init_db as init_tenants_db
 
 
 @asynccontextmanager

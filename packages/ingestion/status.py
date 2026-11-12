@@ -4,9 +4,9 @@
 Un échec de connecteur ne supprime jamais de nœuds : on met à jour l'état, et le
 dashboard affiche l'âge du dernier scan réussi (règle scoring.md).
 """
-import asyncpg
-
 import os
+
+import asyncpg
 
 DATABASE_URL = os.getenv("DATABASE_URL")  # obligatoire : fourni par .env ou le Secret k8s
 

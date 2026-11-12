@@ -1,11 +1,12 @@
 # packages/entity-resolution/tests/test_entity_resolution.py
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from packages.core.models.enums import EdgeType, NodeType
 from packages.core.models.node import CuzNode
-from packages.core.models.enums import NodeType, EdgeType
-from packages.entity_resolution.resolver import DeterministicResolver
 from packages.entity_resolution.merger import NodeMerger
 from packages.entity_resolution.owner_linker import OwnerLinker
+from packages.entity_resolution.resolver import DeterministicResolver
+
 
 def make_node(name: str, source: str, ext_id: str, tenant: str = "acmecorp") -> CuzNode:
     return CuzNode(
@@ -17,7 +18,7 @@ def make_node(name: str, source: str, ext_id: str, tenant: str = "acmecorp") -> 
         confidence_score=0.8,
         freshness_score=0.9,
         sources=[source],
-        last_seen=datetime.now(timezone.utc),
+        last_seen=datetime.now(UTC),
     )
 
 def test_resolver_no_duplicate_different_ids():
@@ -50,7 +51,7 @@ def test_merger_merges_multi_source():
         confidence_score=0.75,
         freshness_score=0.85,
         sources=["entra_id"],
-        last_seen=datetime.now(timezone.utc),
+        last_seen=datetime.now(UTC),
     )
     merged1 = m.merge_or_create(n1)
     merged2 = m.merge_or_create(n2)
@@ -71,7 +72,7 @@ def test_merger_confidence_increases_with_sources():
         confidence_score=0.9,
         freshness_score=0.9,
         sources=["gitea"],
-        last_seen=datetime.now(timezone.utc),
+        last_seen=datetime.now(UTC),
     )
     m.merge_or_create(n1)
     merged = m.merge_or_create(n2)
@@ -81,11 +82,11 @@ def test_owner_linker_resolves_known_convention():
     linker = OwnerLinker()
     user = CuzNode(tenant_id="acmecorp", node_type=NodeType.USER, name="Djana Dev",
                     external_id="uid-001", confidence_score=0.9, freshness_score=0.9,
-                    sources=["entra_id"], last_seen=datetime.now(timezone.utc),
+                    sources=["entra_id"], last_seen=datetime.now(UTC),
                     attributes={"upn": "djana.dev@acmecorp.onmicrosoft.com"})
     repo = CuzNode(tenant_id="acmecorp", node_type=NodeType.REPOSITORY, name="backend",
                     external_id="42", confidence_score=0.9, freshness_score=0.9,
-                    sources=["gitea"], last_seen=datetime.now(timezone.utc),
+                    sources=["gitea"], last_seen=datetime.now(UTC),
                     attributes={"owner": "djana.dev"})
     linker.register_user(user)
     edge = linker.resolve_owns_edge(repo)
@@ -96,7 +97,7 @@ def test_owner_linker_returns_none_when_owner_unknown():
     linker = OwnerLinker()
     repo = CuzNode(tenant_id="acmecorp", node_type=NodeType.REPOSITORY, name="orphan-repo",
                     external_id="99", confidence_score=0.9, freshness_score=0.9,
-                    sources=["gitea"], last_seen=datetime.now(timezone.utc),
+                    sources=["gitea"], last_seen=datetime.now(UTC),
                     attributes={"owner": "unknown-user"})
     assert linker.resolve_owns_edge(repo) is None
 
@@ -111,7 +112,7 @@ def test_merged_node_recognized_by_each_strong_key():
         external_id="sys_id_001",
         external_ids={"servicenow": "sys_id_001", "entra_id": "entra_001"},
         confidence_score=0.75, freshness_score=0.85, sources=["entra_id"],
-        last_seen=datetime.now(timezone.utc),
+        last_seen=datetime.now(UTC),
     )
     merged_id = m.merge_or_create(n2).id
     n3 = make_node("srv-01-entra", "entra_id", "entra_001")
@@ -132,11 +133,11 @@ def test_owner_linker_does_not_cross_tenants():
     linker = OwnerLinker()
     user = CuzNode(tenant_id="tenant_a", node_type=NodeType.USER, name="Djana Dev",
                    external_id="uid-001", confidence_score=0.9, freshness_score=0.9,
-                   sources=["entra_id"], last_seen=datetime.now(timezone.utc),
+                   sources=["entra_id"], last_seen=datetime.now(UTC),
                    attributes={"upn": "djana.dev@a.onmicrosoft.com"})
     repo_b = CuzNode(tenant_id="tenant_b", node_type=NodeType.REPOSITORY, name="backend",
                      external_id="42", confidence_score=0.9, freshness_score=0.9,
-                     sources=["gitea"], last_seen=datetime.now(timezone.utc),
+                     sources=["gitea"], last_seen=datetime.now(UTC),
                      attributes={"owner": "djana.dev"})
     linker.register_user(user)
     assert linker.resolve_owns_edge(repo_b) is None
@@ -146,11 +147,11 @@ def test_owner_edge_carries_repo_tenant():
     linker = OwnerLinker()
     user = CuzNode(tenant_id="tenant_b", node_type=NodeType.USER, name="Djana Dev",
                    external_id="uid-001", confidence_score=0.9, freshness_score=0.9,
-                   sources=["entra_id"], last_seen=datetime.now(timezone.utc),
+                   sources=["entra_id"], last_seen=datetime.now(UTC),
                    attributes={"upn": "djana.dev@b.onmicrosoft.com"})
     repo = CuzNode(tenant_id="tenant_b", node_type=NodeType.REPOSITORY, name="backend",
                    external_id="42", confidence_score=0.9, freshness_score=0.9,
-                   sources=["gitea"], last_seen=datetime.now(timezone.utc),
+                   sources=["gitea"], last_seen=datetime.now(UTC),
                    attributes={"owner": "djana.dev"})
     linker.register_user(user)
     edge = linker.resolve_owns_edge(repo)
@@ -162,11 +163,11 @@ def test_owner_mapping_takes_precedence_over_gitea_org_owner():
     linker = OwnerLinker(owner_mapping={"acmecorp/backend": "djana.dev"})
     user = CuzNode(tenant_id="acmecorp", node_type=NodeType.USER, name="djanaD",
                    external_id="uid-001", confidence_score=0.9, freshness_score=0.9,
-                   sources=["entra_id"], last_seen=datetime.now(timezone.utc),
+                   sources=["entra_id"], last_seen=datetime.now(UTC),
                    attributes={"upn": "djana.dev@acmecorp.onmicrosoft.com"})
     repo = CuzNode(tenant_id="acmecorp", node_type=NodeType.REPOSITORY, name="backend",
                    external_id="1", confidence_score=0.9, freshness_score=0.9,
-                   sources=["gitea"], last_seen=datetime.now(timezone.utc),
+                   sources=["gitea"], last_seen=datetime.now(UTC),
                    attributes={"full_name": "acmecorp/backend", "owner": "acmecorp"})
     linker.register_user(user)
     assert linker.resolve_owns_edge(repo) is not None
