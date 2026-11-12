@@ -3,7 +3,7 @@
 1. Latence : sur un tenant jetable, un utilisateur Entra perd son MFA (publication d'un RawEvent
    has_mfa=false). On mesure le temps jusqu'au finding IAM-001 produit par MutationRouter à partir
    de la mutation publiée par le writer. Chaîne complète : bus -> normalizer -> writer -> Neo4j ->
-   topic de mutations -> routeur. Critère de sortie : < 5 min.
+   topic de mutations -> MutationConsumer -> cuz.findings. Critère de sortie : < 5 min.
 2. Routage réel (lecture seule, tenant --tenant) : IAM-001 et ATTACK-PATH-001-PARTIAL sont
    retrouvés en ne lançant que les règles routées ; NET-001 est évalué si une mutation SERVER l'y route.
 
@@ -27,6 +27,8 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from packages.core.models.events import EventType, NormalizedEvent, RawEvent  # noqa: E402
+from packages.detection.models import Finding  # noqa: E402
+from packages.detection.mutation_consumer import MutationConsumer  # noqa: E402
 from packages.detection.mutation_router import MutationRouter, affected_rule_ids  # noqa: E402
 from packages.graph.client import Neo4jClient  # noqa: E402
 from packages.graph.writer import GraphWriter  # noqa: E402
@@ -64,6 +66,7 @@ def measure_latency(trials: int) -> list[float]:
         f"cuz.normalized.{tenant}",
         f"cuz.graph.mutations.{tenant}",
         f"cuz.graph.mutations.{tenant}.dlq",
+        f"cuz.findings.{tenant}",
     ]
     admin = AdminClient({"bootstrap.servers": BOOTSTRAP})
     for fut in admin.create_topics(
@@ -82,27 +85,31 @@ def measure_latency(trials: int) -> list[float]:
     found: dict[str, float] = {}  # nom du user -> instant du finding IAM-001
     stop = threading.Event()
 
-    def detect() -> None:
+    # Le vrai consumer de production lit les mutations et publie les findings ; on mesure
+    # le délai jusqu'à leur arrivée sur cuz.findings.{tenant}.
+    detector = MutationConsumer(tenant, BOOTSTRAP, group_id=f"{group}-detect", router=router)
+    threading.Thread(target=lambda: detector.run(stop=stop), daemon=True).start()
+
+    def collect() -> None:
         c = Consumer(
             {
                 "bootstrap.servers": BOOTSTRAP,
-                "group.id": f"{group}-detect",
+                "group.id": f"{group}-collect",
                 "auto.offset.reset": "earliest",
             }
         )
-        c.subscribe([f"cuz.graph.mutations.{tenant}"])
+        c.subscribe([f"cuz.findings.{tenant}"])
         while not stop.is_set():
-            msg = c.poll(0.2)
+            msg = c.poll(0.1)
             if msg is None or msg.error():
                 continue
-            event = NormalizedEvent.model_validate_json(msg.value())
-            for f in router.run_on_mutation(tenant, event):
-                if f.rule_id == "IAM-001":
-                    for name in f.affected_node_names:
-                        found.setdefault(name, time.time())
+            finding = Finding.model_validate_json(msg.value())
+            if finding.rule_id == "IAM-001":
+                for name in finding.affected_node_names:
+                    found.setdefault(name, time.time())
         c.close()
 
-    threading.Thread(target=detect, daemon=True).start()
+    threading.Thread(target=collect, daemon=True).start()
     producer = EventProducer(BOOTSTRAP)
     latencies: list[float] = []
     try:

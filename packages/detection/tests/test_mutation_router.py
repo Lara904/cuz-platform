@@ -201,18 +201,48 @@ def test_run_on_mutation_rejects_cross_tenant_event():
     assert calls == []
 
 
-def test_failing_rule_does_not_block_other_rules():
-    router, _ = _router()
-    ids = registered_rules()
-    real = ids["IAM-001"]
+def test_failing_rule_does_not_block_other_rules_and_is_reported():
+    rows = {"ATTACK-PATH-001-PARTIAL": [{"node_ids": ["a"], "node_names": ["a"]}]}
+    router, _ = _router(rows)
 
     def boom(session: Any, tenant_id: str) -> list:
         raise RuntimeError("neo4j down")
 
-    boom.__name__ = "IAM_001"
+    boom.spec = router._rules["IAM-001"].spec  # type: ignore[attr-defined]
     router._rules["IAM-001"] = boom  # type: ignore[assignment]
-    router._rules["ATTACK-PATH-001-PARTIAL"] = lambda s, t: real(s, t)  # type: ignore[assignment]
-    assert router.run_on_mutation(TENANT, _node_event(NodeType.USER)) == []
+    result = router.run_on_mutations(TENANT, [_node_event(NodeType.USER)])
+    assert result.failed_rules == ["IAM-001"]
+    assert [f.rule_id for f in result.findings] == ["ATTACK-PATH-001-PARTIAL"]
+
+
+def test_batch_runs_each_rule_once():
+    router, calls = _router()
+    events = [_node_event(NodeType.USER) for _ in range(50)]
+    result = router.run_on_mutations(TENANT, events)
+    assert result.rules_run == len(calls) == 3  # IAM-001, ATTACK-PATH-001-PARTIAL, CIS-005
+
+
+def test_batch_unions_rules_of_different_mutations():
+    router, calls = _router()
+    result = router.run_on_mutations(
+        TENANT, [_node_event(NodeType.USER), _edge_event(EdgeType.ALLOWS)]
+    )
+    assert result.rules_run == len(calls) == 4  # + OAUTH-LATERAL-001
+
+
+def test_batch_with_nothing_routed_opens_no_session():
+    router, calls = _router()
+    result = router.run_on_mutations(TENANT, [_node_event(NodeType.NETWORK)])
+    assert result.rules_run == 0 and calls == []
+
+
+def test_batch_rejects_any_cross_tenant_event_before_running():
+    router, calls = _router()
+    with pytest.raises(ValueError):
+        router.run_on_mutations(
+            TENANT, [_node_event(NodeType.USER), _node_event(NodeType.USER, tenant="other")]
+        )
+    assert calls == []
 
 
 # ── réduction du volume de requêtes ─────────────────────────────────────────

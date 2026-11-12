@@ -14,7 +14,7 @@ Limites assumées (cf. docs/known-limits.md) :
 """
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from packages.core.models.events import EventType, NormalizedEvent
@@ -99,6 +99,13 @@ def _is_relevant(trigger: Trigger, event: NormalizedEvent) -> bool:
     return bool(trigger.node_props & (set(node.attributes) | set(node.tags)))
 
 
+@dataclass(frozen=True)
+class BatchResult:
+    findings: list[Finding]
+    failed_rules: list[str]
+    rules_run: int
+
+
 class MutationRouter:
     def __init__(self, runner: DetectionRunner | None = None) -> None:
         self.runner = runner or DetectionRunner()
@@ -118,22 +125,40 @@ class MutationRouter:
             if rule_id in self._rules and _is_relevant(trigger, event)
         ]
 
-    def run_on_mutation(self, tenant_id: str, event: NormalizedEvent) -> list[Finding]:
-        if event.tenant_id != tenant_id:  # isolation tenant : jamais d'évaluation croisée
-            raise ValueError(f"événement du tenant {event.tenant_id} routé vers {tenant_id}")
-        rules = self.rules_for_event(event)
-        self._mutations += 1
+    def run_on_mutations(self, tenant_id: str, events: Sequence[NormalizedEvent]) -> BatchResult:
+        """Évalue un lot de mutations : l'union des règles routées, chacune UNE seule fois.
+
+        Les règles s'évaluent sur tout le tenant : lancer la même règle pour chaque mutation d'un
+        rescan (des milliers) n'apporterait aucun finding de plus. Les échecs de règle sont
+        remontés dans `failed_rules` pour que l'appelant ne valide pas un lot non évalué.
+        """
+        for event in events:
+            if event.tenant_id != tenant_id:  # isolation tenant : jamais d'évaluation croisée
+                raise ValueError(f"événement du tenant {event.tenant_id} routé vers {tenant_id}")
+        rules: dict[str, RuleFn] = {}
+        for event in events:
+            for rule_fn in self.rules_for_event(event):
+                rules[rule_fn.spec.rule_id] = rule_fn  # type: ignore[attr-defined]
+        self._mutations += len(events)
         self._queries += len(rules)
         findings: list[Finding] = []
-        with self.runner.driver.session() as session:
-            for rule_fn in rules:
-                try:
-                    findings.extend(rule_fn(session, tenant_id))
-                except Exception as exc:  # une règle en échec ne bloque pas les autres
-                    logger.error("tenant=%s rule %s failed: %s", tenant_id, rule_fn.__name__, exc)
+        failed: list[str] = []
+        if rules:
+            with self.runner.driver.session() as session:
+                for rule_id, rule_fn in rules.items():
+                    try:
+                        findings.extend(rule_fn(session, tenant_id))
+                    except Exception as exc:  # une règle en échec ne bloque pas les autres
+                        failed.append(rule_id)
+                        logger.error("tenant=%s rule %s failed: %s", tenant_id, rule_id, exc)
         if findings:
             self.runner._fill_confidence(tenant_id, findings)
-        return deduplicate(findings)
+        return BatchResult(
+            findings=deduplicate(findings), failed_rules=failed, rules_run=len(rules)
+        )
+
+    def run_on_mutation(self, tenant_id: str, event: NormalizedEvent) -> list[Finding]:
+        return self.run_on_mutations(tenant_id, [event]).findings
 
     def query_reduction_pct(self) -> float:
         """Réduction du nombre de requêtes Cypher vs un scan complet à chaque mutation,
@@ -163,6 +188,7 @@ def affected_rule_ids(event: NormalizedEvent) -> list[str]:
 
 __all__ = [
     "RULE_TRIGGERS",
+    "BatchResult",
     "MutationRouter",
     "Trigger",
     "affected_rule_ids",

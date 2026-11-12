@@ -103,7 +103,26 @@ dépend d'une propriété seule (ex. CIS-001) : ces entrées restent à relire.
   (CONTAINER ou STORAGE créé : 5 règles sur 21, soit 76 %, sous le critère de 80 %). Le critère tient sur
   le trafic réel observé, pas sur le pire cas.
 - Délai : `scripts/measure_detection_latency.py`, 10 pertes de MFA sur un tenant jetable, chaîne complète
-  bus → normalizer → writer → Neo4j → topic de mutations → routeur : 23 à 30 ms. Mesure locale
-  (Redpanda et Neo4j sur la même machine), sans latence source → connecteur.
-- Le routeur n'est branché à aucun service : rien ne consomme `cuz.graph.mutations.{tenant}` en continu,
-  seul le script de mesure le fait. Un consumer de production reste à écrire.
+  bus → normalizer → writer → Neo4j → topic de mutations → `MutationConsumer` → `cuz.findings.{tenant}` :
+  0,18 à 0,24 s, dont 0,2 s de fenêtre de regroupement du consumer. Mesure locale (Redpanda et Neo4j sur la
+  même machine), sans latence source → connecteur.
+
+### Consumer de production (`packages/detection/mutation_consumer.py`)
+Lit `cuz.graph.mutations.{tenant}` en continu, évalue chaque lot de mutations (une fois par règle routée
+et par lot, pas par mutation) et publie les nouveaux findings sur `cuz.findings.{tenant}`.
+`python -m packages.detection.mutation_consumer --tenant acmecorp`, une réplica par tenant.
+- **Rien ne lit encore `cuz.findings.{tenant}`** : l'API garde son store en mémoire alimenté par
+  `run_all()` (`services/api/routers/findings.py`). Un finding réactif n'apparaît donc dans le dashboard
+  qu'au prochain recalcul de l'API. Le brancher (consumer côté API ou table PostgreSQL des findings)
+  reste à faire : c'est le dernier maillon pour que la détection réactive soit visible des utilisateurs.
+- Non déployé sur le cluster : aucun manifeste pour ce consumer, comme pour le writer et l'ingestion
+  (processus local).
+- Déduplication des findings déjà publiés en mémoire : un redémarrage republie une fois les findings encore
+  ouverts. Un finding dont le contenu change sans changer (rule_id, nœuds) n'est pas republié.
+- Un lot dont une règle échoue (Neo4j indisponible) est réessayé 3 fois (backoff 2 s, 4 s), puis ses
+  événements vont en DLQ `cuz.graph.mutations.{tenant}.dlq` (reason `detection_failed:`) et l'offset
+  avance. Aucun outil de rejeu de la DLQ n'existe : la DLQ est partagée avec le writer et l'ingestion.
+- Si la livraison d'un finding échoue (broker injoignable), le process s'arrête sans commiter : il lui faut
+  un superviseur qui le relance.
+- Non lancé sur le tenant `acmecorp` réel : la validation live utilise un tenant jetable. Le comportement sous
+  une rafale de dizaines de milliers de mutations n'est couvert que par les tests unitaires (lots de 40).
