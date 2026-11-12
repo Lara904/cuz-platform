@@ -122,7 +122,3 @@ def _load_json(raw: str | None) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
-
-    def run_on_mutation(self, tenant_id: str, affected_node_id: str) -> list[Finding]:
-        """Phase 1 : relance toutes les règles. Filtrage fin par nœud en Phase 2."""
-        return self.run_all(tenant_id)

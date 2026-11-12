@@ -66,3 +66,44 @@ Kubernetes (il lit aujourd'hui un kubeconfig), non traitée ici.
 ### Suppressions non propagées
 Le watch Kubernetes ignore DELETED : le graphe ne supprime jamais de nœud, la fraîcheur décroît
 (stale-detection P1.14). Un pod supprimé reste donc dans le graphe jusqu'à ce que sa fraîcheur le signale.
+
+## Détection réactive (P2.8)
+
+### Une règle déclenchée s'évalue sur tout le tenant
+`MutationRouter` choisit *quelles* règles relancer, pas *sur quels nœuds*. Les règles Cypher prennent
+`(session, tenant_id)` : une mutation USER relance IAM-001 sur tous les utilisateurs du tenant. Le gain
+est sur le nombre de règles (21 → 1 à 5), pas sur le volume de données lues par règle.
+
+### Seules les règles Cypher sont routées
+OPA et les alertes cloud restent dans `DetectionRunner.run_all()`. Une mutation qui devrait violer une
+policy OPA n'est donc vue qu'au prochain scan complet.
+
+### Pas de clôture de finding sur mutation
+Le routeur ne remonte que des findings ouverts, comme `run_all()`. Quand un utilisateur retrouve son MFA,
+rien ne ferme le finding IAM-001 : il disparaît au recalcul, avec la conservation d'état de `findings.py`.
+
+### CIS-004 (fraîcheur) est exclue du routage
+`freshness_score < 0.2` dépend du temps, pas d'une mutation : elle reste au scan périodique
+(`stale_detection`).
+
+### Règles dormantes : NET-001 et plusieurs CIS
+Elles lisent des propriétés (`port_22_exposed`, `tls_cert_expired`, …) que le writer ne promeut pas
+(`NATIVE_PROMOTED_KEYS`) : elles ne matchent rien dans Neo4j, routées ou non. Leur entrée dans
+`RULE_TRIGGERS` est prête pour le jour où la propriété sera produite, mais **NET-001 n'a pas pu être
+validée sur un finding réel** : seul son routage (mutation SERVER) l'est.
+
+### Table de correspondance maintenue à la main
+`RULE_TRIGGERS` doit suivre les requêtes Cypher. Le test `test_triggers_cover_every_type_cited_in_rule_cypher`
+échoue si une requête cite un `node_type`/`edge_type` absent de la table, mais ne voit pas une règle qui
+dépend d'une propriété seule (ex. CIS-001) : ces entrées restent à relire.
+
+### Ce que couvrent les mesures
+- Réduction : 91,9 % sur 38 939 mutations du topic `cuz.graph.mutations.acmecorp` (21 requêtes par scan
+  complet). Le topic ne contient que des NODE_UPDATED (rescans) : sur une création, SHADOW-IT-001 s'ajoute
+  (CONTAINER ou STORAGE créé : 5 règles sur 21, soit 76 %, sous le critère de 80 %). Le critère tient sur
+  le trafic réel observé, pas sur le pire cas.
+- Délai : `scripts/measure_detection_latency.py`, 10 pertes de MFA sur un tenant jetable, chaîne complète
+  bus → normalizer → writer → Neo4j → topic de mutations → routeur : 23 à 30 ms. Mesure locale
+  (Redpanda et Neo4j sur la même machine), sans latence source → connecteur.
+- Le routeur n'est branché à aucun service : rien ne consomme `cuz.graph.mutations.{tenant}` en continu,
+  seul le script de mesure le fait. Un consumer de production reste à écrire.
