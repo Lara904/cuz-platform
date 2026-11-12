@@ -17,11 +17,13 @@ import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from dotenv import load_dotenv
+from neo4j import Session
 
 from packages.core.models.edge import CuzEdge
-from packages.core.models.enums import EdgeType
+from packages.core.models.enums import EdgeType, NodeType
 from packages.core.models.events import EventType, NormalizedEvent
 from packages.core.scoring import compute_confidence, compute_freshness
 
@@ -33,7 +35,7 @@ class GraphNode:
     id: str
     name: str
     node_type: str
-    attributes: dict
+    attributes: dict[str, Any]
     dependencies: tuple[str, ...] = ()  # VULNERABILITY ids (repos) ; vide pour les autres
 
 
@@ -92,16 +94,18 @@ def correlate(
     return edges
 
 
-def vuln_node_type():
+def vuln_node_type() -> NodeType:
     from packages.core.models.enums import NodeType
 
     return NodeType.VULNERABILITY
 
 
-def _read_graph(session, tenant_id: str) -> tuple[list, list, dict, list]:
-    def parse(raw):
+def _read_graph(
+    session: Session, tenant_id: str
+) -> tuple[list[GraphNode], list[GraphNode], dict[str, GraphNode], list[GraphNode]]:
+    def parse(raw: str | None) -> dict[str, Any]:
         try:
-            return json.loads(raw or "{}")
+            return cast(dict[str, Any], json.loads(raw or "{}"))
         except json.JSONDecodeError:
             return {}
 

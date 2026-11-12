@@ -13,7 +13,7 @@ STRONG_ID_KEYS = {
 class DeterministicResolver:
     """Match sur identifiants forts — doublons < 10% garantis."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # index: (tenant_id, source, external_id) -> CuzNode.id
         self._index: dict[tuple[str, str, str], str] = {}
         # stockage: node.id -> CuzNode

@@ -5,6 +5,7 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import httpx
 
@@ -29,10 +30,10 @@ class GiteaConnector(IConnector):
             r = await c.get(f"{self.base_url}/api/v1/user")
             return r.status_code == 200
 
-    async def _get_repos(self, client: httpx.AsyncClient) -> list[dict]:
+    async def _get_repos(self, client: httpx.AsyncClient) -> list[dict[str, Any]]:
         r = await client.get(f"{self.base_url}/api/v1/orgs/{self.org}/repos", params={"limit": 50})
         r.raise_for_status()
-        return r.json()
+        return cast(list[dict[str, Any]], r.json())
 
     async def _get_file(
         self, client: httpx.AsyncClient, owner: str, repo: str, path: str
@@ -42,7 +43,7 @@ class GiteaConnector(IConnector):
             return r.text
         return None
 
-    def _parse_dependencies(self, package_json: str, requirements_txt: str) -> list[dict]:
+    def _parse_dependencies(self, package_json: str, requirements_txt: str) -> list[dict[str, Any]]:
         deps = []
         if package_json:
             try:
@@ -102,7 +103,7 @@ class GiteaConnector(IConnector):
         r = await client.post(f"{self.base_url}/api/v1/repos/{owner}/{repo}/hooks", json=payload)
         return r.status_code in (200, 201)
 
-    async def _repo_event(self, client: httpx.AsyncClient, repo: dict) -> RawEvent:
+    async def _repo_event(self, client: httpx.AsyncClient, repo: dict[str, Any]) -> RawEvent:
         """RawEvent « repository » d'un dépôt : dépendances lues dans package.json / requirements.txt."""
         owner, name = repo["owner"]["login"], repo["name"]
         pkg_json = await self._get_file(client, owner, name, "package.json")

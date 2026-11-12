@@ -2,6 +2,7 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from packages.core.models.enums import NodeType
 from packages.core.models.node import CuzNode
@@ -24,7 +25,7 @@ class TerraformMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_resource(self, resource: dict) -> CuzNode | None:
+    def map_resource(self, resource: dict[str, Any]) -> CuzNode | None:
         node_type = RESOURCE_TYPE_TO_NODE_TYPE.get(resource["type"])
         if node_type is None:
             return None
@@ -48,7 +49,7 @@ class TerraformMapper:
         )
 
 
-def load_resources(path: Path) -> list[dict]:
+def load_resources(path: Path) -> list[dict[str, Any]]:
     """Lit un fichier tfstate (version 4) et retourne les ressources aplaties."""
     state = json.loads(path.read_text(encoding="utf-8"))
     resources = []
@@ -64,7 +65,7 @@ def load_resources(path: Path) -> list[dict]:
     return resources
 
 
-def compute_drift(iac_names: set[str], real_names: set[str]) -> dict:
+def compute_drift(iac_names: set[str], real_names: set[str]) -> dict[str, Any]:
     """Drift entre ressources gérées par Terraform et ressources réelles observées.
 
     Les ensembles contiennent des clés typées « TYPE:nom » (ex: « STORAGE:acmecorp-archive »,

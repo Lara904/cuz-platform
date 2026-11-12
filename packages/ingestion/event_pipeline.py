@@ -25,6 +25,7 @@ import math
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.core.models.events import RawEvent
 from packages.ingestion.producer import EventProducer
@@ -37,7 +38,7 @@ EVENT_SOURCES = ("kubernetes", "cloud_detection")  # gitea : webhook
 class EventPipeline:
     def __init__(
         self,
-        connectors: dict,
+        connectors: dict[str, Any],
         producer: EventProducer | None = None,
         backoff_seconds: float = 5.0,
         max_backoff_seconds: float = 60.0,
@@ -51,7 +52,7 @@ class EventPipeline:
         self.restarts: dict[str, int] = defaultdict(int)
         self._latencies: dict[str, list[float]] = defaultdict(list)
 
-    async def _run_connector_stream(self, name: str, connector) -> None:
+    async def _run_connector_stream(self, name: str, connector: Any) -> None:
         """Consomme UN flux jusqu'à sa fin ou son erreur."""
         async for raw_event in connector.subscribe_events():
             self._publish(name, raw_event)
@@ -67,7 +68,7 @@ class EventPipeline:
             raw_event.event_id,
         )
 
-    async def _supervise(self, name: str, connector) -> None:
+    async def _supervise(self, name: str, connector: Any) -> None:
         backoff = self.backoff_seconds
         while True:
             try:

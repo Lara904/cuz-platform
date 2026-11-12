@@ -16,6 +16,9 @@ import sys
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any, cast
+
+from neo4j import Session
 
 from packages.core.models.edge import CuzEdge
 from packages.core.models.enums import EdgeType, NodeType
@@ -82,7 +85,7 @@ class BusinessProcessLoader:
                 unresolved.append(f"{process.name} → {asset_ref}")
                 logger.warning("asset non résolu pour '%s' : %s", process.name, asset_ref)
                 continue
-            base = dict(
+            base: dict[str, Any] = dict(
                 event_id=str(uuid.uuid4()),
                 raw_event_id="business-process-csv",
                 tenant_id=self.tenant_id,
@@ -95,7 +98,7 @@ class BusinessProcessLoader:
         return events, unresolved
 
 
-def graph_resolver(session, tenant_id: str) -> AssetResolver:
+def graph_resolver(session: Session, tenant_id: str) -> AssetResolver:
     """Résolution par external_id, puis par nom si le nom est unique dans le tenant."""
 
     def resolve(ref: str) -> str | None:
@@ -108,7 +111,7 @@ def graph_resolver(session, tenant_id: str) -> AssetResolver:
         ).data()
         by_ext = [r["id"] for r in rows if r["by_ext"]]
         if len(by_ext) == 1:
-            return by_ext[0]
+            return cast(str | None, by_ext[0])
         by_name = [r["id"] for r in rows]
         return by_name[0] if len(by_name) == 1 else None
 

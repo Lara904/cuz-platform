@@ -1,5 +1,6 @@
 # packages/connectors/minio/mapper.py
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.core.models.enums import NodeType
 from packages.core.models.node import CuzNode
@@ -10,7 +11,7 @@ class MinIOMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_bucket(self, raw: dict) -> CuzNode:
+    def map_bucket(self, raw: dict[str, Any]) -> CuzNode:
         last_seen = datetime.now(UTC)
         contains_pii = any(
             obj.get("tags", {}).get("contains_pii") == "true" for obj in raw.get("objects", [])

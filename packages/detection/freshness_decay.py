@@ -13,6 +13,7 @@ import json
 import logging
 import sys
 from datetime import UTC, datetime
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -34,7 +35,7 @@ def _parse_dt(value: str | None) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
-def decayed_node(row: dict, now: datetime) -> CuzNode:
+def decayed_node(row: dict[str, Any], now: datetime) -> CuzNode:
     """Reconstruit le CuzNode d'une ligne Neo4j avec la fraîcheur recalculée."""
     node_type = NodeType(row["node_type"])
     last_seen = _parse_dt(row["last_seen"])

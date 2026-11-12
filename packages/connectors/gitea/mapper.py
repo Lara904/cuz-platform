@@ -1,5 +1,6 @@
 # packages/connectors/gitea/mapper.py
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.core.models.edge import CuzEdge
 from packages.core.models.enums import EdgeType, NodeType
@@ -11,7 +12,7 @@ class GiteaMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_repo(self, raw: dict) -> CuzNode:
+    def map_repo(self, raw: dict[str, Any]) -> CuzNode:
         last_seen = datetime.now(UTC)
         return CuzNode(
             tenant_id=self.tenant_id,
@@ -32,7 +33,7 @@ class GiteaMapper:
             tags={"source": "gitea"},
         )
 
-    def map_dependency(self, dep: dict) -> CuzNode:
+    def map_dependency(self, dep: dict[str, Any]) -> CuzNode:
         last_seen = datetime.now(UTC)
         dep_name = f"{dep['name']}@{dep['version']}"
         return CuzNode(

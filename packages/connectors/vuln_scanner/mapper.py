@@ -1,5 +1,6 @@
 # packages/connectors/vuln_scanner/mapper.py
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.core.models.edge import CuzEdge
 from packages.core.models.enums import EdgeType, NodeType
@@ -11,7 +12,7 @@ class VulnScannerMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_cve(self, rec: dict) -> CuzNode:
+    def map_cve(self, rec: dict[str, Any]) -> CuzNode:
         last_seen = datetime.now(UTC)
         return CuzNode(
             tenant_id=self.tenant_id,

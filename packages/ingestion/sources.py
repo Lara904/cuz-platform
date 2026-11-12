@@ -3,15 +3,16 @@
 
 import logging
 import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 TENANT = "acmecorp"
 
 
-def build_connectors(tenant_id: str = TENANT) -> dict:
+def build_connectors(tenant_id: str = TENANT) -> dict[str, Any]:
     """Instancie les connecteurs disponibles ; un connecteur mal configuré est ignoré."""
-    connectors = {}
+    connectors: dict[str, Any] = {}
     try:
         from packages.connectors.minio_connector.connector import MinIOConnector
 

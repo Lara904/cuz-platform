@@ -9,7 +9,7 @@ Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 FindingStatus = Literal["open", "acknowledged", "false_positive", "resolved"]
 
 
-class Finding(BaseModel):
+class Finding(BaseModel):  # type: ignore[misc, unused-ignore]  # pydantic absent de l'env mypy : BaseModel Any
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str
     rule_id: str

@@ -3,6 +3,7 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 
@@ -85,7 +86,7 @@ class ServiceNowConnector(IConnector):
         self._token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
         return self._token
 
-    async def _auth_headers(self) -> dict:
+    async def _auth_headers(self) -> dict[str, Any]:
         token = await self._get_token()
         return {"Authorization": f"Bearer {token}"}
 
@@ -93,13 +94,19 @@ class ServiceNowConnector(IConnector):
 
     async def test_connection(self) -> bool:
         url = f"{self.instance_url}/api/now/table/cmdb_ci_server"
-        params = {"sysparm_limit": 1, "sysparm_fields": "sys_id"}
+        params: dict[str, Any] = {"sysparm_limit": 1, "sysparm_fields": "sys_id"}
         headers = await self._auth_headers()
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(url, params=params, headers=headers)
             return r.status_code == 200
 
-    async def _get_with_retry(self, client, url, params, headers):
+    async def _get_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        params: dict[str, Any],
+        headers: dict[str, Any],
+    ) -> httpx.Response:
         """GET avec retry borné sur 5xx (PDI instable). Les 4xx ne sont pas retentés."""
         for attempt in range(1, 7):
             r = await client.get(url, params=params, headers=headers)
@@ -113,9 +120,9 @@ class ServiceNowConnector(IConnector):
         client: httpx.AsyncClient,
         table: str,
         updated_after: datetime | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         url = f"{self.instance_url}/api/now/table/{table}"
-        params = {
+        params: dict[str, Any] = {
             "sysparm_limit": 500,
             "sysparm_display_value": "false",
         }

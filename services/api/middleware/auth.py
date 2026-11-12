@@ -15,8 +15,10 @@ Azure AD / OIDC externe.
 """
 
 import os
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -57,7 +59,7 @@ ROLE_HIERARCHY: dict[Role, int] = {
 }
 
 
-class TokenData(BaseModel):
+class TokenData(BaseModel):  # type: ignore[misc, unused-ignore]  # pydantic absent de l'env mypy : BaseModel Any
     sub: str  # username
     role: Role
     tenant_id: str | None = None  # None pour tenant_admin (cross-tenant)
@@ -74,7 +76,7 @@ def create_access_token(sub: str, role: Role, tenant_id: str | None = None) -> s
         "tenant_id": tenant_id,
         "exp": expire,
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return str(jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM))
 
 
 # ── Validation du token ───────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
 
 
 # ── Dépendances RBAC ─────────────────────────────────────────────────────────
-def require_role(minimum_role: Role):
+def require_role(minimum_role: Role) -> Callable[..., Coroutine[Any, Any, TokenData]]:
     """
     Dépendance FastAPI qui enforce un rôle minimum.
 
@@ -120,7 +122,9 @@ def require_role(minimum_role: Role):
     return _check
 
 
-def require_tenant_scope(tenant_id_param: str = "tenant_id"):
+def require_tenant_scope(
+    tenant_id_param: str = "tenant_id",
+) -> Callable[..., Coroutine[Any, Any, TokenData]]:
     """
     Dépendance qui vérifie que l'utilisateur a accès au tenant demandé.
     - tenant_admin peut accéder à tous les tenants

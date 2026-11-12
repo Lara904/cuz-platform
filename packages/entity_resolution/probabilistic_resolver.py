@@ -87,7 +87,9 @@ def exact_name_u(df: pd.DataFrame) -> float:
     return max(identical, 1) / max(pairs, 1)
 
 
-def _record(unique_id: str, node_type: str, name: str | None, ip: Any, source: str) -> dict:
+def _record(
+    unique_id: str, node_type: str, name: str | None, ip: Any, source: str
+) -> dict[str, Any]:
     return {
         "unique_id": unique_id,
         "node_type": node_type,
@@ -216,7 +218,7 @@ class ProbabilisticResolver:
         }
 
 
-def _gamma_levels(comparison: dict) -> list[tuple[int, dict]]:
+def _gamma_levels(comparison: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
     """(gamma, niveau) hors niveau NULL. Le modèle sérialisé n'a pas de clé gamma : les niveaux sont
     ordonnés du plus spécifique au plus général, donc gamma = nb_niveaux - 1 - position."""
     levels = [lv for lv in comparison["comparison_levels"] if not lv.get("is_null_level")]
@@ -224,8 +226,10 @@ def _gamma_levels(comparison: dict) -> list[tuple[int, dict]]:
 
 
 def recalibrate_m(
-    model: dict, gamma_counts: dict[str, dict[int, int]], strength: int = M_SMOOTHING_STRENGTH
-) -> dict:
+    model: dict[str, Any],
+    gamma_counts: dict[str, dict[int, int]],
+    strength: int = M_SMOOTHING_STRENGTH,
+) -> dict[str, Any]:
     """Fonction pure : m_new = (observés + strength * m_ancien) / (N + strength), par comparaison.
     `gamma_counts` : output_column_name -> {gamma -> nb de paires validées}."""
     for comparison in model["comparisons"]:
@@ -241,7 +245,7 @@ def recalibrate_m(
     return model
 
 
-def _m_snapshot(model: dict) -> dict[str, list[float]]:
+def _m_snapshot(model: dict[str, Any]) -> dict[str, list[float]]:
     return {
         c["output_column_name"]: [round(lv["m_probability"], 4) for _, lv in _gamma_levels(c)]
         for c in model["comparisons"]
@@ -253,7 +257,7 @@ def retrain_from_merged_pairs(
     df: pd.DataFrame,
     merged_pairs: list[tuple[str, str]],
     path: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Recalibre les m du modèle sur les paires validées « merge ». L'ancien modèle est conservé
     (*.prev.json). Lève InsufficientLabelsError sous MIN_POSITIVE_LABELS paires exploitables."""
     target = path or model_path(resolver.tenant_id)
@@ -295,7 +299,9 @@ def measure_duplicate_rate(total_nodes: int, duplicate_pairs: int) -> float:
     return round(100 * duplicate_pairs / total_nodes, 2)
 
 
-def compute_stats(tenant_id: str, df: pd.DataFrame, resolver: ProbabilisticResolver) -> dict:
+def compute_stats(
+    tenant_id: str, df: pd.DataFrame, resolver: ProbabilisticResolver
+) -> dict[str, Any]:
     classified = resolver.classify(resolver.predict_candidate_pairs(df))
     auto, review = len(classified["auto_merge"]), len(classified["needs_human_review"])
     return {

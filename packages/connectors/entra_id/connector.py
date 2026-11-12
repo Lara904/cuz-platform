@@ -3,6 +3,7 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import httpx
 
@@ -54,7 +55,7 @@ class EntraIDConnector(IConnector):
         except Exception:
             return False
 
-    async def _get_all_pages(self, url: str) -> list[dict]:
+    async def _get_all_pages(self, url: str) -> list[dict[str, Any]]:
         token = await self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
         results = []
@@ -67,7 +68,7 @@ class EntraIDConnector(IConnector):
                 url = data.get("@odata.nextLink")
         return results
 
-    async def _get_mfa_methods(self, user_id: str) -> list[dict]:
+    async def _get_mfa_methods(self, user_id: str) -> list[dict[str, Any]]:
         token = await self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{GRAPH_BASE}/users/{user_id}/authentication/methods"
@@ -75,7 +76,7 @@ class EntraIDConnector(IConnector):
             async with httpx.AsyncClient(timeout=20) as client:
                 r = await client.get(url, headers=headers)
                 if r.status_code == 200:
-                    return r.json().get("value", [])
+                    return cast(list[dict[str, Any]], r.json().get("value", []))
         except Exception:
             pass
         return []

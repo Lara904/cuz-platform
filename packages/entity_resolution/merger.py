@@ -1,5 +1,6 @@
 # packages/entity-resolution/merger.py
 from datetime import UTC, datetime
+from typing import cast
 
 from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
@@ -15,8 +16,8 @@ class NodeMerger:
         if not is_dup:
             self.resolver.register(incoming)
             return incoming
-        existing = self.resolver.get(existing_id)
-        merged = self._merge(existing, incoming)
+        existing = self.resolver.get(cast(str, existing_id))
+        merged = self._merge(cast(CuzNode, existing), incoming)
         self.resolver.register(merged)  # ré-indexe les clés fortes élargies
         return merged
 

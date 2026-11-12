@@ -4,6 +4,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 from minio import Minio
 
@@ -45,14 +46,14 @@ class MinIOConnector(IConnector):
         except Exception:
             return False
 
-    def _get_bucket_tags(self, bucket_name: str) -> dict:
+    def _get_bucket_tags(self, bucket_name: str) -> dict[str, Any]:
         try:
             tags = self.client.get_bucket_tags(bucket_name)
             return dict(tags) if tags else {}
         except Exception:
             return {}
 
-    def _list_objects_with_tags(self, bucket_name: str) -> list[dict]:
+    def _list_objects_with_tags(self, bucket_name: str) -> list[dict[str, Any]]:
         objects = []
         try:
             for obj in self.client.list_objects(bucket_name, recursive=True):

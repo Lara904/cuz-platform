@@ -1,5 +1,6 @@
 # packages/connectors/servicenow/mapper.py
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.core.models.enums import NodeType
 from packages.core.models.node import CuzNode
@@ -19,7 +20,7 @@ class ServiceNowMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_ci(self, table: str, rec: dict) -> CuzNode | None:
+    def map_ci(self, table: str, rec: dict[str, Any]) -> CuzNode | None:
         node_type = TABLE_TO_NODE_TYPE.get(table)
         if not node_type:
             return None

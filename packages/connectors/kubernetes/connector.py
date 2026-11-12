@@ -13,6 +13,7 @@ import threading
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from kubernetes import client, config, watch
 
@@ -24,11 +25,11 @@ logger = logging.getLogger(__name__)
 WATCH_QUEUE_SIZE = 1000  # borne la mémoire : au-delà, le thread du watch attend (contre-pression)
 
 
-def _owner_deployment(pod) -> str | None:
+def _owner_deployment(pod: Any) -> str | None:
     """Deployment propriétaire : ReplicaSet « <deploy>-<hash> » → <deploy>. None si pod nu."""
     for ref in pod.metadata.owner_references or []:
         if ref.kind == "ReplicaSet" and "-" in ref.name:
-            return ref.name.rsplit("-", 1)[0]
+            return cast(str, ref.name.rsplit("-", 1)[0])
     return None
 
 
@@ -36,7 +37,7 @@ class KubernetesConnector(IConnector):
     def __init__(self, tenant_id: str, kubeconfig_path: str, cluster_name: str = "acmecorp"):
         super().__init__(tenant_id, {})
         self.cluster_name = cluster_name
-        config.load_kube_config(config_file=kubeconfig_path)
+        config.load_kube_config(config_file=kubeconfig_path)  # type: ignore[no-untyped-call, unused-ignore]  # stubs kubernetes sans annotations
         self.core_v1 = client.CoreV1Api()
 
     async def test_connection(self) -> bool:
@@ -47,7 +48,7 @@ class KubernetesConnector(IConnector):
             return False
 
     @staticmethod
-    def _pod_is_public_exposed(pod, services: list[dict]) -> bool:
+    def _pod_is_public_exposed(pod: Any, services: list[dict[str, Any]]) -> bool:
         """Exposé publiquement = sélectionné par un Service LoadBalancer ou NodePort."""
         pod_labels = pod.metadata.labels or {}
         for svc in services:
@@ -58,13 +59,15 @@ class KubernetesConnector(IConnector):
                 return True
         return False
 
-    def _list_services(self, namespace: str) -> list[dict]:
+    def _list_services(self, namespace: str) -> list[dict[str, Any]]:
         return [
             {"name": s.metadata.name, "type": s.spec.type, "selector": s.spec.selector}
-            for s in self.core_v1.list_namespaced_service(namespace).items
+            for s in cast(list[Any], self.core_v1.list_namespaced_service(namespace).items)
         ]
 
-    def _pod_record(self, pod, namespace: str, namespace_uid: str, services: list[dict]) -> dict:
+    def _pod_record(
+        self, pod: Any, namespace: str, namespace_uid: str, services: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Enregistrement d'un pod, identique pour pull_full et le watch : le normalizer n'a qu'une forme."""
         containers = pod.spec.containers or []
         return {
@@ -89,7 +92,7 @@ class KubernetesConnector(IConnector):
 
     async def pull_full(self) -> list[RawEvent]:
         events: list[RawEvent] = [self._wrap("cluster", {"name": self.cluster_name})]
-        for node in self.core_v1.list_node().items:  # nœuds du cluster → SERVER
+        for node in cast(list[Any], self.core_v1.list_node().items):  # nœuds du cluster → SERVER
             events.append(
                 self._wrap(
                     "node",
@@ -100,12 +103,12 @@ class KubernetesConnector(IConnector):
                     },
                 )
             )
-        for ns in self.core_v1.list_namespace().items:
+        for ns in cast(list[Any], self.core_v1.list_namespace().items):
             ns_name = ns.metadata.name
             ns_raw = {"name": ns_name, "uid": ns.metadata.uid, "cluster_name": self.cluster_name}
             events.append(self._wrap("namespace", ns_raw))
             services = self._list_services(ns_name)
-            for pod in self.core_v1.list_namespaced_pod(ns_name).items:
+            for pod in cast(list[Any], self.core_v1.list_namespaced_pod(ns_name).items):
                 events.append(
                     self._wrap("pod", self._pod_record(pod, ns_name, ns.metadata.uid, services))
                 )
@@ -120,18 +123,18 @@ class KubernetesConnector(IConnector):
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[RawEvent] = asyncio.Queue(maxsize=WATCH_QUEUE_SIZE)
         stop = threading.Event()
-        watcher = watch.Watch()
+        watcher = watch.Watch()  # type: ignore[no-untyped-call, unused-ignore]  # stubs kubernetes sans annotations
         namespace_uids: dict[str, str] = {}
 
         def namespace_uid(name: str) -> str:
             if name not in namespace_uids:
-                namespace_uids[name] = self.core_v1.read_namespace(name).metadata.uid
+                namespace_uids[name] = cast(Any, self.core_v1.read_namespace(name)).metadata.uid
             return namespace_uids[name]
 
         def run_watch() -> None:
             while not stop.is_set():
                 try:
-                    for event in watcher.stream(
+                    for event in watcher.stream(  # type: ignore[no-untyped-call, unused-ignore]  # stubs kubernetes sans annotations
                         self.core_v1.list_pod_for_all_namespaces, timeout_seconds=60
                     ):
                         if stop.is_set():
@@ -156,9 +159,9 @@ class KubernetesConnector(IConnector):
                 yield await queue.get()
         finally:
             stop.set()
-            watcher.stop()
+            watcher.stop()  # type: ignore[no-untyped-call, unused-ignore]  # stubs kubernetes sans annotations
 
-    def _wrap(self, object_type: str, data: dict) -> RawEvent:
+    def _wrap(self, object_type: str, data: dict[str, Any]) -> RawEvent:
         return RawEvent(
             event_id=str(uuid.uuid4()),
             tenant_id=self.tenant_id,

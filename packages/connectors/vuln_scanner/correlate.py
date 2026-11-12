@@ -17,8 +17,10 @@ import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from dotenv import load_dotenv
+from neo4j import Session
 from packaging.version import InvalidVersion, Version
 
 from packages.core.models.edge import CuzEdge
@@ -35,7 +37,7 @@ _CONSTRAINT = re.compile(r"^\s*(<=|>=|<|>|==|=)?\s*([\w.\-]+)\s*$")
 class GraphNode:
     id: str
     name: str
-    attributes: dict
+    attributes: dict[str, Any]
     sources: tuple[str, ...] = ()
 
 
@@ -98,12 +100,12 @@ def correlate(cves: list[GraphNode], deps: list[GraphNode], tenant_id: str) -> l
     return edges
 
 
-def _read_graph(session, tenant_id: str) -> tuple[list[GraphNode], list[GraphNode]]:
+def _read_graph(session: Session, tenant_id: str) -> tuple[list[GraphNode], list[GraphNode]]:
     import json
 
-    def parse(raw):
+    def parse(raw: str | None) -> dict[str, Any]:
         try:
-            return json.loads(raw or "{}")
+            return cast(dict[str, Any], json.loads(raw or "{}"))
         except json.JSONDecodeError:
             return {}
 
@@ -112,7 +114,8 @@ def _read_graph(session, tenant_id: str) -> tuple[list[GraphNode], list[GraphNod
         "RETURN v.id AS id, v.name AS name, v.attributes AS attrs, v.sources AS sources",
         t=tenant_id,
     ).data()
-    cves, deps = [], []
+    cves: list[GraphNode] = []
+    deps: list[GraphNode] = []
     for r in rows:
         node = GraphNode(r["id"], r["name"], parse(r["attrs"]), tuple(r["sources"] or ()))
         if "vuln_scanner" in node.sources:

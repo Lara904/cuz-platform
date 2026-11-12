@@ -5,6 +5,8 @@ Aucune pondération par contexte de conformité n'est calculée ici : c'est un j
 humain, documenté à part (docs/dict-convention.md).
 """
 
+from typing import Any
+
 from packages.core.models.node import CuzNode
 
 DICT_AXES = ("D", "I", "C", "T")
@@ -16,7 +18,7 @@ def node_criticality_order(node: CuzNode) -> int | None:
     dict_attrs = node.attributes.get("criticality")
     if not isinstance(dict_attrs, dict):
         return None
-    values = [dict_attrs.get(axis) for axis in DICT_AXES]
+    values: list[Any] = [dict_attrs.get(axis) for axis in DICT_AXES]
     values = [v for v in values if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 4]
     return max(values) if values else None
 

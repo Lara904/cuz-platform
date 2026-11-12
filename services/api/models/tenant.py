@@ -15,7 +15,7 @@ class TenantStatus(str, Enum):  # noqa: UP042 — str()/format() inchangés vs S
     PENDING = "pending"
 
 
-class TenantCreate(BaseModel):
+class TenantCreate(BaseModel):  # type: ignore[misc, unused-ignore]  # pydantic absent de l'env mypy : BaseModel Any
     id: str = Field(
         ...,
         pattern=r"^[a-z0-9\-]+$",
@@ -28,13 +28,13 @@ class TenantCreate(BaseModel):
     description: str | None = Field(None, max_length=512)
 
 
-class TenantUpdate(BaseModel):
+class TenantUpdate(BaseModel):  # type: ignore[misc, unused-ignore]  # pydantic absent de l'env mypy : BaseModel Any
     name: str | None = Field(None, min_length=2, max_length=128)
     description: str | None = Field(None, max_length=512)
     status: TenantStatus | None = None
 
 
-class TenantResponse(BaseModel):
+class TenantResponse(BaseModel):  # type: ignore[misc, unused-ignore]  # pydantic absent de l'env mypy : BaseModel Any
     id: str
     name: str
     description: str | None

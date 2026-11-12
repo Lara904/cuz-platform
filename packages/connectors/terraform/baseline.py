@@ -18,6 +18,7 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -37,7 +38,9 @@ def _namespace(attrs_raw: str | None) -> str:
         return "default"
 
 
-def build_keys(iac_rows: list[dict], real_rows: list[dict]) -> tuple[set[str], set[str]]:
+def build_keys(
+    iac_rows: list[dict[str, Any]], real_rows: list[dict[str, Any]]
+) -> tuple[set[str], set[str]]:
     """iac_rows / real_rows : dicts {node_type, name, attrs, owner_deployment, freshness}."""
     iac: set[str] = set()
     for r in iac_rows:
@@ -58,7 +61,7 @@ def build_keys(iac_rows: list[dict], real_rows: list[dict]) -> tuple[set[str], s
     return iac, real
 
 
-def measure(tenant_id: str) -> dict:
+def measure(tenant_id: str) -> dict[str, Any]:
     with Neo4jClient.get_driver().session() as session:
         iac_rows = session.run(
             "MATCH (n:CuzNode {tenant_id: $t}) WHERE n.iac_managed = true "

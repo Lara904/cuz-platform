@@ -3,10 +3,14 @@ import json
 import logging
 import os
 import socket
+from typing import Any, cast
 
 from confluent_kafka import Consumer, Producer
+from neo4j import Session
 
+from packages.core.models.edge import CuzEdge
 from packages.core.models.events import NormalizedEvent
+from packages.core.models.node import CuzNode
 from packages.entity_resolution.merger import NodeMerger
 from packages.entity_resolution.owner_linker import OwnerLinker  # NOUVEAU (V3, P1.6)
 from packages.entity_resolution.resolver import DeterministicResolver
@@ -106,7 +110,7 @@ class GraphWriter:
         self.merger = NodeMerger(self.resolver)
         self.owner_linker = OwnerLinker()  # NOUVEAU (V3)
         # Repos vus avant leur propriétaire : OWNS rattrapé en fin de flux (reconcile_owns)
-        self._pending_repos: dict[str, object] = {}
+        self._pending_repos: dict[str, CuzNode] = {}
         self.consumer = Consumer(
             {
                 "bootstrap.servers": bootstrap_servers,
@@ -122,7 +126,9 @@ class GraphWriter:
         )
         self.producer = Producer({"bootstrap.servers": bootstrap_servers})
 
-    def _native_attrs(self, attributes: dict, tags: dict | None = None) -> dict:
+    def _native_attrs(
+        self, attributes: dict[str, Any], tags: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """FIX-3 : extrait les clés promues, en filtrant les None
         (Neo4j n'accepte pas de propriété nulle sur += ).
         La criticité DICT est éclatée en criticality_D/I/C/T."""
@@ -148,9 +154,9 @@ class GraphWriter:
         sur cuz.quarantine.{tenant_id} (table PostgreSQL pas encore créée)."""
         logger.warning(
             "node quarantined (confidence %.2f < %.2f): %s",
-            event.node.confidence_score,
+            cast(CuzNode, event.node).confidence_score,
             CONFIDENCE_THRESHOLD,
-            event.node.id,
+            cast(CuzNode, event.node).id,
         )
         self.producer.produce(
             topic=f"cuz.quarantine.{event.tenant_id}",
@@ -159,9 +165,9 @@ class GraphWriter:
         )
         self.producer.poll(0)
 
-    def _upsert_node(self, session, event: NormalizedEvent) -> None:
-        node = self.merger.merge_or_create(event.node)
-        params = {
+    def _upsert_node(self, session: Session, event: NormalizedEvent) -> None:
+        node = self.merger.merge_or_create(cast(CuzNode, event.node))
+        params: dict[str, Any] = {
             "tenant_id": node.tenant_id,
             "external_id": node.external_id or node.id,
             "id": node.id,
@@ -191,7 +197,7 @@ class GraphWriter:
             else:
                 self._pending_repos[node.id] = node
 
-    def reconcile_owns(self, session) -> int:
+    def reconcile_owns(self, session: Session) -> int:
         """Rattrape les arêtes OWNS dont le USER est arrivé après le repo."""
         created = 0
         for repo_id, repo in list(self._pending_repos.items()):
@@ -203,10 +209,10 @@ class GraphWriter:
         logger.info("reconcile_owns: %d arête(s) OWNS créée(s)", created)
         return created
 
-    def _upsert_edge(self, session, edge) -> None:
+    def _upsert_edge(self, session: Session, edge: CuzEdge) -> None:
         """NOUVEAU (V3). Appelé pour les arêtes produites par le Normalizer
         (DEPENDS_ON) et pour l'arête OWNS résolue par OwnerLinker."""
-        params = {
+        params: dict[str, Any] = {
             "tenant_id": edge.tenant_id,
             "id": edge.id,
             "edge_type": edge.edge_type.value,
@@ -230,7 +236,7 @@ class GraphWriter:
         )
         self.producer.poll(0)
 
-    def process_event(self, session, raw_value: bytes) -> None:
+    def process_event(self, session: Session, raw_value: bytes) -> None:
         """Traite un NormalizedEvent. Lève une exception en cas d'échec."""
         event = NormalizedEvent.model_validate_json(raw_value.decode())
         if event.node:
@@ -246,7 +252,7 @@ class GraphWriter:
     def _dlq(self, tenant_id: str, raw_value: bytes, reason: str) -> bool:
         """Envoie le message en DLQ et attend la confirmation du broker.
         Retourne False si la confirmation n'arrive pas : l'offset ne doit alors PAS être validé."""
-        errors: list = []
+        errors: list[Any] = []
         self.producer.produce(
             topic=f"cuz.graph.mutations.{tenant_id}.dlq",
             value=raw_value,
@@ -276,10 +282,10 @@ class GraphWriter:
                     if msg.error():
                         continue
                     try:
-                        self.process_event(session, msg.value())
+                        self.process_event(session, cast(bytes, msg.value()))
                     except Exception as e:
                         logger.error("GraphWriter error: %s", e)
-                        if not self._dlq(tenant_id, msg.value(), f"write_error:{e}"):
+                        if not self._dlq(tenant_id, cast(bytes, msg.value()), f"write_error:{e}"):
                             raise RuntimeError(
                                 "DLQ non confirmée : arrêt sans validation d'offset"
                             ) from e

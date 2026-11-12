@@ -1,5 +1,6 @@
 # packages/ingestion/normalizer.py
 import uuid
+from typing import Any
 
 from packages.connectors.cloud_detection.mapper import CloudDetectionMapper
 from packages.connectors.entra_id.mapper import EntraIDMapper
@@ -9,15 +10,19 @@ from packages.connectors.minio_connector.mapper import MinIOMapper
 from packages.connectors.servicenow.mapper import ServiceNowMapper
 from packages.connectors.terraform.mapper import TerraformMapper
 from packages.connectors.vuln_scanner.mapper import VulnScannerMapper
+from packages.core.models.edge import CuzEdge
 from packages.core.models.events import NormalizedEvent, RawEvent
+from packages.core.models.node import CuzNode
 
 
 class Normalizer:
-    def __init__(self):
-        self._mappers: dict = {}
-        self._repo_node_cache: dict = {}  # (tenant_id, repo_external_id) -> CuzNode
+    def __init__(self) -> None:
+        self._mappers: dict[tuple[str, str], Any] = {}
+        self._repo_node_cache: dict[
+            tuple[str, Any], CuzNode | None
+        ] = {}  # (tenant_id, repo_external_id) -> CuzNode
 
-    def _get_mapper(self, source: str, tenant_id: str):
+    def _get_mapper(self, source: str, tenant_id: str) -> Any:
         key = (source, tenant_id)
         if key not in self._mappers:
             if source == "servicenow":
@@ -39,7 +44,7 @@ class Normalizer:
         return self._mappers.get(key)
 
     @staticmethod
-    def _stamp(node):
+    def _stamp(node: CuzNode | None) -> CuzNode | None:
         """Id stable `{connector}:{external_id}` (CLAUDE.md). Un id aléatoire
         par exécution casse les MATCH par id des arêtes lors d'un rescan."""
         if node is not None:
@@ -156,7 +161,9 @@ class Normalizer:
 
         return results
 
-    def _wrap(self, raw: RawEvent, node=None, edge=None) -> NormalizedEvent:
+    def _wrap(
+        self, raw: RawEvent, node: CuzNode | None = None, edge: CuzEdge | None = None
+    ) -> NormalizedEvent:
         return NormalizedEvent(
             event_id=str(uuid.uuid4()),
             raw_event_id=raw.event_id,

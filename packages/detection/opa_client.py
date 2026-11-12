@@ -25,7 +25,7 @@ class OPAClient:
         self,
         base_url: str = OPA_URL,
         timeout: float = 5.0,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: httpx.BaseTransport | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout

@@ -78,7 +78,7 @@ RULE_TRIGGERS: dict[str, Trigger] = {
 def registered_rules() -> dict[str, RuleFn]:
     """Toutes les règles Cypher enregistrées, par rule_id (même registre que run_all)."""
     return {
-        fn.spec.rule_id: fn  # type: ignore[attr-defined]
+        fn.spec.rule_id: fn  # type: ignore[attr-defined, unused-ignore]  # spec posé dynamiquement par @rule
         for module in ALL_RULE_MODULES
         for fn in module.RULES
     }

@@ -1,5 +1,6 @@
 # packages/connectors/kubernetes/mapper.py
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.core.models.edge import CuzEdge
 from packages.core.models.enums import EdgeType, NodeType
@@ -8,7 +9,12 @@ from packages.core.scoring import compute_confidence, compute_freshness
 
 
 def _node(
-    tenant_id: str, node_type: NodeType, name: str, external_id: str, attributes: dict, tags: dict
+    tenant_id: str,
+    node_type: NodeType,
+    name: str,
+    external_id: str,
+    attributes: dict[str, Any],
+    tags: dict[str, Any],
 ) -> CuzNode:
     last_seen = datetime.now(UTC)
     return CuzNode(
@@ -30,7 +36,7 @@ class KubernetesMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_cluster(self, raw: dict) -> CuzNode:
+    def map_cluster(self, raw: dict[str, Any]) -> CuzNode:
         return _node(
             self.tenant_id,
             NodeType.CLUSTER,
@@ -40,7 +46,7 @@ class KubernetesMapper:
             {"object_type": "cluster"},
         )
 
-    def map_node(self, raw: dict) -> CuzNode:
+    def map_node(self, raw: dict[str, Any]) -> CuzNode:
         """Nœud Kubernetes (worker ou control plane) → SERVER. external_id = nom du nœud,
         stable entre runs et résolvable depuis node_name d'un pod."""
         return _node(
@@ -52,7 +58,7 @@ class KubernetesMapper:
             {"object_type": "k8s_node"},
         )
 
-    def map_namespace(self, raw: dict) -> CuzNode:
+    def map_namespace(self, raw: dict[str, Any]) -> CuzNode:
         return _node(
             self.tenant_id,
             NodeType.CLUSTER,
@@ -62,7 +68,7 @@ class KubernetesMapper:
             {"object_type": "namespace"},
         )
 
-    def map_pod(self, raw: dict) -> CuzNode:
+    def map_pod(self, raw: dict[str, Any]) -> CuzNode:
         return _node(
             self.tenant_id,
             NodeType.CONTAINER,
@@ -88,7 +94,7 @@ class KubernetesMapper:
         source: CuzNode,
         target: CuzNode,
         sources: list[str],
-        attributes: dict | None = None,
+        attributes: dict[str, Any] | None = None,
     ) -> CuzEdge:
         return CuzEdge(
             tenant_id=self.tenant_id,

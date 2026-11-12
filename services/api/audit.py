@@ -10,6 +10,7 @@ refuse UPDATE, DELETE et TRUNCATE. Une écriture d'audit qui échoue doit faire
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import asyncpg
 
@@ -99,7 +100,7 @@ async def record(entry: AuditEntry) -> None:
         )
 
 
-async def history(tenant_id: str, finding_id: str) -> list[dict]:
+async def history(tenant_id: str, finding_id: str) -> list[dict[str, Any]]:
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -112,7 +113,7 @@ async def history(tenant_id: str, finding_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-async def recent(tenant_id: str, limit: int = 20) -> list[dict]:
+async def recent(tenant_id: str, limit: int = 20) -> list[dict[str, Any]]:
     """Derniers événements d'audit du tenant, du plus récent au plus ancien."""
     pool = await get_pool()
     async with pool.acquire() as conn:

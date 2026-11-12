@@ -11,6 +11,7 @@ import argparse
 import json
 import logging
 import sys
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -21,7 +22,7 @@ logger = logging.getLogger("stale_detection")
 STALE_THRESHOLD = 0.2
 
 
-def run(tenant_id: str) -> dict:
+def run(tenant_id: str) -> dict[str, Any]:
     with Neo4jClient.get_driver().session() as session:
         rows = session.run(
             """MATCH (n:CuzNode {tenant_id: $t})

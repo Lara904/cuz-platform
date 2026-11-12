@@ -9,7 +9,9 @@ Une écriture qui échoue doit faire échouer l'action : pas de décision sans t
 """
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from services.api.audit import get_pool
 
@@ -98,7 +100,7 @@ async def record(d: Decision) -> None:
         )
 
 
-async def latest_decisions(tenant_id: str) -> dict[str, dict]:
+async def latest_decisions(tenant_id: str) -> dict[str, dict[str, Any]]:
     """pair_id -> dernière décision."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -114,7 +116,9 @@ async def stats(tenant_id: str) -> dict[str, int]:
         total = await conn.fetchval(
             "SELECT count(*) FROM er_decisions WHERE tenant_id = $1", tenant_id
         )
-    count = lambda kind: sum(1 for d in latest.values() if d["decision"] == kind)  # noqa: E731
+    count: Callable[[str], int] = lambda kind: sum(  # noqa: E731
+        1 for d in latest.values() if d["decision"] == kind
+    )
     return {
         "total_reviewed": len(latest),
         "total_decisions": int(total),

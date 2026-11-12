@@ -40,7 +40,7 @@ async def get_pool() -> asyncpg.Pool:
 
 
 # ── Initialisation du schéma ──────────────────────────────────────────────────
-async def init_db():
+async def init_db() -> None:
     """Crée la table tenants si elle n'existe pas."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -68,7 +68,7 @@ def row_to_tenant(row: asyncpg.Record) -> TenantResponse:
     )
 
 
-async def _provision_tenant(tenant_id: str):
+async def _provision_tenant(tenant_id: str) -> None:
     """
     Stub de provisioning automatique — sera complété en P1 :
     - Contrainte Neo4j : CREATE CONSTRAINT FOR (n:Node) REQUIRE n.tenant_id IS NOT NULL
@@ -82,10 +82,10 @@ async def _provision_tenant(tenant_id: str):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-@router.get("/", response_model=list[TenantResponse])
+@router.get("/", response_model=list[TenantResponse])  # type: ignore[misc, untyped-decorator, unused-ignore]  # fastapi absent de l'env mypy : décorateur Any
 async def list_tenants(
     current_user: TokenData = Depends(require_role(Role.TENANT_ADMIN)),
-):
+) -> list[TenantResponse]:
     """Liste tous les tenants. Réservé au rôle tenant_admin."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -93,11 +93,11 @@ async def list_tenants(
     return [row_to_tenant(r) for r in rows]
 
 
-@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)  # type: ignore[misc, untyped-decorator, unused-ignore]  # fastapi absent de l'env mypy : décorateur Any
 async def create_tenant(
     payload: TenantCreate,
     current_user: TokenData = Depends(require_role(Role.TENANT_ADMIN)),
-):
+) -> TenantResponse:
     """
     Crée un nouveau tenant.
     Provisionne automatiquement :
@@ -130,11 +130,11 @@ async def create_tenant(
     return row_to_tenant(row)
 
 
-@router.get("/{tenant_id}", response_model=TenantResponse)
+@router.get("/{tenant_id}", response_model=TenantResponse)  # type: ignore[misc, untyped-decorator, unused-ignore]  # fastapi absent de l'env mypy : décorateur Any
 async def get_tenant(
     tenant_id: str,
     current_user: TokenData = Depends(require_role(Role.VIEWER)),
-):
+) -> TenantResponse:
     """
     Détail d'un tenant.
     - tenant_admin : peut voir tous les tenants
@@ -154,12 +154,12 @@ async def get_tenant(
     return row_to_tenant(row)
 
 
-@router.put("/{tenant_id}", response_model=TenantResponse)
+@router.put("/{tenant_id}", response_model=TenantResponse)  # type: ignore[misc, untyped-decorator, unused-ignore]  # fastapi absent de l'env mypy : décorateur Any
 async def update_tenant(
     tenant_id: str,
     payload: TenantUpdate,
     current_user: TokenData = Depends(require_role(Role.ADMIN)),
-):
+) -> TenantResponse:
     """Mise à jour d'un tenant. Rôle minimum : admin."""
     if current_user.role != Role.TENANT_ADMIN and current_user.tenant_id != tenant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
@@ -198,11 +198,11 @@ async def update_tenant(
     return row_to_tenant(row)
 
 
-@router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)  # type: ignore[misc, untyped-decorator, unused-ignore]  # fastapi absent de l'env mypy : décorateur Any
 async def delete_tenant(
     tenant_id: str,
     current_user: TokenData = Depends(require_role(Role.TENANT_ADMIN)),
-):
+) -> None:
     """
     Supprime un tenant. Réservé au rôle tenant_admin.
     ATTENTION : opération irréversible. Supprime toutes les données associées.

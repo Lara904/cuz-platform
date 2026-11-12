@@ -12,6 +12,7 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import httpx
 
@@ -51,7 +52,7 @@ class VulnScannerConnector(IConnector):
             r = await client.get(f"{self.scanner_url}/health")
             return r.status_code == 200
 
-    async def _load_cves(self) -> list[dict]:
+    async def _load_cves(self) -> list[dict[str, Any]]:
         if self.fixtures_path:
             with open(self.fixtures_path, encoding="utf-8") as f:
                 data = json.load(f)
@@ -59,7 +60,7 @@ class VulnScannerConnector(IConnector):
         async with self._client(30) as client:
             r = await client.get(f"{self.scanner_url}/findings")
             r.raise_for_status()
-            return r.json().get("findings", [])
+            return cast(list[dict[str, Any]], r.json().get("findings", []))
 
     async def pull_full(self) -> list[RawEvent]:
         events: list[RawEvent] = []
@@ -79,7 +80,7 @@ class VulnScannerConnector(IConnector):
                 yield event
             await asyncio.sleep(21600)  # poll 6h, aligné sur Entra ID
 
-    def _wrap(self, record: dict) -> RawEvent:
+    def _wrap(self, record: dict[str, Any]) -> RawEvent:
         return RawEvent(
             event_id=str(uuid.uuid4()),
             tenant_id=self.tenant_id,

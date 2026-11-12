@@ -4,6 +4,8 @@ CuzNode (name, attributes.ip_address). created_at n'est pas comparé : c'est la 
 du scan, pas une date de création de la ressource. Un modèle par tenant, pas de fuite cross-tenant
 (cf. critère P2.14)."""
 
+from typing import Any
+
 import splink.comparison_library as cl
 from splink import SettingsCreator, block_on
 
@@ -52,10 +54,10 @@ EXPERT_M_PROBABILITIES: dict[str, list[float]] = {
 }
 
 
-def build_settings_dict(prior: float, exact_name_u: float) -> dict:
+def build_settings_dict(prior: float, exact_name_u: float) -> dict[str, Any]:
     """Settings Splink avec m_probability spécifiés ; u estimé sur les données, sauf le niveau
     « nom identique » (jamais observé par échantillonnage) dont le u est fourni par l'appelant."""
-    settings = build_settings(prior).create_settings_dict("duckdb")
+    settings: dict[str, Any] = build_settings(prior).create_settings_dict("duckdb")
     for comparison in settings["comparisons"]:
         m_values = iter(EXPERT_M_PROBABILITIES[comparison["output_column_name"]])
         for level in comparison["comparison_levels"]:

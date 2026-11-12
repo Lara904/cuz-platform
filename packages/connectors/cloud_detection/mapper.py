@@ -1,12 +1,20 @@
 # packages/connectors/cloud_detection/mapper.py
 from datetime import UTC, datetime
+from typing import Any, Protocol
 
 from packages.core.models.enums import NodeType
 from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
 
 
-def _node(tenant_id: str, rec: dict, name: str, subtype: str, attributes: dict) -> CuzNode:
+class _HasAttributes(Protocol):
+    @property
+    def attributes(self) -> dict[str, Any]: ...
+
+
+def _node(
+    tenant_id: str, rec: dict[str, Any], name: str, subtype: str, attributes: dict[str, Any]
+) -> CuzNode:
     last_seen = datetime.now(UTC)
     return CuzNode(
         tenant_id=tenant_id,
@@ -27,7 +35,7 @@ class CloudDetectionMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
 
-    def map_alert(self, rec: dict) -> CuzNode:
+    def map_alert(self, rec: dict[str, Any]) -> CuzNode:
         """Une alerte cloud est un VULNERABILITY avec node_subtype='cloud_alert' (tag natif
         filtrable). Ajouter un NodeType ALERT ne se justifie qu'au volume d'un futur client."""
         return _node(
@@ -44,7 +52,7 @@ class CloudDetectionMapper:
             },
         )
 
-    def map_recommendation(self, rec: dict) -> CuzNode:
+    def map_recommendation(self, rec: dict[str, Any]) -> CuzNode:
         return _node(
             self.tenant_id,
             rec,
@@ -58,7 +66,9 @@ class CloudDetectionMapper:
         )
 
 
-def deduplicate_against_cypher_findings(cloud_nodes: list, cypher_rule_ids: set) -> list:
+def deduplicate_against_cypher_findings[T: _HasAttributes](
+    cloud_nodes: list[T], cypher_rule_ids: set[str]
+) -> list[T]:
     """Retire les nœuds cloud dont le rule_id est déjà couvert par un finding Cypher :
     un IAM-001 vu par Defender ET par le moteur ne remonte pas deux fois."""
     return [n for n in cloud_nodes if n.attributes.get("rule_id") not in cypher_rule_ids]

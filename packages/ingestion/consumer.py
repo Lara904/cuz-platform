@@ -2,6 +2,8 @@
 import logging
 import os
 import socket
+from collections.abc import Callable
+from typing import cast
 
 from confluent_kafka import Consumer, KafkaError, Producer
 
@@ -9,7 +11,7 @@ from packages.core.models.events import NormalizedEvent, RawEvent
 from packages.ingestion.normalizer import Normalizer
 
 logger = logging.getLogger(__name__)
-SEEN_EVENT_IDS: set = set()  # en mémoire — Redis en prod
+SEEN_EVENT_IDS: set[str] = set()  # en mémoire — Redis en prod
 
 
 class PipelineConsumer:
@@ -57,7 +59,12 @@ class PipelineConsumer:
         )
         self.normalized_producer.poll(0)
 
-    def process(self, tenant_id: str, raw_bytes: bytes, on_normalized=None) -> str:
+    def process(
+        self,
+        tenant_id: str,
+        raw_bytes: bytes,
+        on_normalized: Callable[[NormalizedEvent], None] | None = None,
+    ) -> str:
         """Traite un message brut. Retourne 'duplicate', 'parse_error',
         'normalize_error' ou 'processed'. Ne lit ni ne commit Kafka."""
         try:
@@ -86,7 +93,12 @@ class PipelineConsumer:
                     return "normalize_error"
         return "normalize_error"  # max_retries <= 0
 
-    def run(self, tenant_id: str, on_normalized=None, idle_timeout: float | None = None) -> None:
+    def run(
+        self,
+        tenant_id: str,
+        on_normalized: Callable[[NormalizedEvent], None] | None = None,
+        idle_timeout: float | None = None,
+    ) -> None:
         """Si idle_timeout (s) est fourni, s'arrête après autant de secondes sans message."""
         topic = f"cuz.raw.{tenant_id}"
         self.consumer.subscribe([topic])
@@ -101,10 +113,10 @@ class PipelineConsumer:
                     continue
                 idle = 0.0
                 if msg.error():
-                    if msg.error().code() != KafkaError._PARTITION_EOF:
+                    if cast(KafkaError, msg.error()).code() != KafkaError._PARTITION_EOF:
                         logger.error("Kafka error: %s", msg.error())
                     continue
-                self.process(tenant_id, msg.value(), on_normalized)
+                self.process(tenant_id, cast(bytes, msg.value()), on_normalized)
                 self.consumer.commit(message=msg)
         finally:
             self.normalized_producer.flush(timeout=10)  # ne rien perdre en sortie

@@ -11,6 +11,7 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -26,7 +27,7 @@ class CloudDetectionConnector(IConnector):
         self,
         tenant_id: str,
         eventhub_url: str,
-        credentials: dict,
+        credentials: dict[str, Any],
         transport: httpx.AsyncBaseTransport | None = None,
     ):
         super().__init__(tenant_id, credentials)
@@ -68,7 +69,7 @@ class CloudDetectionConnector(IConnector):
                         yield self._wrap("alert", alert)
             await asyncio.sleep(POLL_SECONDS)
 
-    def _wrap(self, object_type: str, data: dict) -> RawEvent:
+    def _wrap(self, object_type: str, data: dict[str, Any]) -> RawEvent:
         return RawEvent(
             event_id=str(uuid.uuid4()),
             tenant_id=self.tenant_id,
