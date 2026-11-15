@@ -21,3 +21,5 @@ redis>=5.0
 # Résolution d'entités probabiliste (P2.5)
 splink>=5.0
 pandas>=2.0
+# Agents zero-trust + JIT Access (P2.11, packages/agents/vault_jit_client.py)
+hvac>=2.1

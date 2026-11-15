@@ -79,6 +79,22 @@ services:
       disable: true
       
 
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: cuz-vault
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"   # UI + API, mode dev local uniquement (jamais en production réelle)
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN:-cuz-dev-root-token}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8200/v1/sys/health?standbyok=true']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   opa:
     image: openpolicyagent/opa:0.63.0
     container_name: cuz-opa
