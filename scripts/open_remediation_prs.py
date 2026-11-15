@@ -88,7 +88,7 @@ async def main() -> None:
     gen = GitOpsPRGenerator(
         gitea_base_url=os.environ["GITEA_URL"],
         admin_token=os.environ["GITEA_ADMIN_TOKEN"],
-        iac_repo=os.environ.get("GITEA_IAC_REPO", "infra-terraform"),
+        iac_repo=os.environ.get("GITEA_IAC_REPO", "infra"),
         org=os.environ.get("GITEA_ORG", "acmecorp"),
     )
 
