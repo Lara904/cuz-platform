@@ -33,3 +33,7 @@ ac9_register_connectors.sh
 DEVIATIONS.md 
 
 
+CLAUDE.md
+.claude/
+Doc_dev/
+scripts/seed_extra.py
