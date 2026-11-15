@@ -8,6 +8,7 @@ Prérequis (voir infra/vault/policies/ et scripts/setup_vault.py) :
 Ignoré automatiquement si Vault n'est pas joignable (packages/agents/conftest.py).
 """
 
+import hvac
 import pytest
 
 from packages.agents.vault_jit_client import VaultJITClient
@@ -23,9 +24,17 @@ def test_acquire_and_revoke_jit_credential_roundtrip():
     assert credential["ttl_seconds"] <= 60
 
     assert client.revoke(credential["lease_id"]) is True
-    # Un accessor déjà révoqué ne doit jamais faire planter l'appelant (RÈGLE 6 :
-    # la révocation reste "au mieux", jamais bloquante pour le finally de l'agent).
-    assert client.revoke(credential["lease_id"]) is False
+
+    # Vérifié contre un vrai Vault (pas supposé) : revoke_accessor est idempotent côté
+    # Vault --- révoquer un accessor déjà révoqué réussit à nouveau silencieusement
+    # (204), il ne lève jamais. C'est voulu : un appel réseau redondant depuis le finally
+    # d'un agent (RÈGLE 6) ne doit jamais faire planter l'appelant.
+    assert client.revoke(credential["lease_id"]) is True
+
+    # Ce qui doit réellement être vrai après révocation : le token lui-même n'est plus
+    # utilisable --- c'est ça, et pas le code de retour de revoke(), qui prouve la révocation.
+    with pytest.raises(hvac.exceptions.Forbidden):
+        client.client.auth.token.lookup(credential["client_token"])
 
 
 @pytest.mark.live_integration("vault")
