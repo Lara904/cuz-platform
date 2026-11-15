@@ -6,6 +6,8 @@ ruff>=0.4
 mypy>=1.10
 neo4j>=5.0
 httpx==0.27.2
+# Rendu du corps de PR GitOps (P2.10, packages/remediation/gitops_pr_generator.py)
+jinja2>=3.1
 confluent-kafka>=2.3
 minio>=7.2
 python-dotenv>=1.0
