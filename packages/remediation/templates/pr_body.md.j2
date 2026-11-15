@@ -1,0 +1,29 @@
+## Finding CUz : {{ title }}
+
+| | |
+|---|---|
+| **Règle** | {{ rule_id }} |
+| **Sévérité** | {{ severity }} |
+| **Tier** | {{ tier }} (réversible, PR GitOps) |
+| **Confiance** | {{ confidence }} % |
+| **Actif** | {{ asset }} |
+| **Fichier modifié** | {{ file_path }} |
+
+**Justification** : {{ justification }}
+
+**Finding** : `{{ finding_link }}`
+
+### Changement proposé
+
+{{ fence }}diff
+{{ diff }}
+{{ fence }}
+
+### À savoir avant de merger
+
+- Cette PR modifie le **code** IaC. L'infrastructure réelle ne change qu'après un `terraform plan` relu puis
+  un `terraform apply` : le merge seul ne corrige rien.
+- Elle est réversible : annuler (revert) cette PR restaure l'état précédent du code.
+- Rien n'est mergé automatiquement. **Une revue humaine est requise.**
+
+_PR générée par CUz pour un finding Tier 1 (RÈGLE 7), demandée par {{ actor }}._
