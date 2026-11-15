@@ -100,8 +100,9 @@ def test_no_mapping_entry_targets_a_nonexistent_rule():
 
 
 def test_there_are_26_classified_rules():
-    assert len(registered_rules()) == 21
-    assert len(RULE_TIER_MAPPING) == 26  # 21 Cypher + 5 OPA
+    # P2.10 bis (DEC-004) : +3 règles Cypher (IAM-STALE-ROLE-001, NET-SSH-OPEN-001, CERT-EXPIRED-001)
+    assert len(registered_rules()) == 24
+    assert len(RULE_TIER_MAPPING) == 29  # 24 Cypher + 5 OPA
 
 
 # ── RÈGLE 7 : seul le Tier 1 s'automatise ───────────────────────────────────
@@ -113,9 +114,24 @@ def test_only_tier_1_rules_are_automatable():
 
 
 def test_the_set_of_automatable_rules_is_pinned():
-    """Ajouter une règle au Tier 1 (donc l'autoriser à agir seule) doit modifier ce test."""
+    """Ajouter une règle au Tier 1 (donc l'autoriser à agir seule) doit modifier ce test.
+
+    P2.10 bis (DEC-004) : +3 entrées. can_automate() les autorise (Tier 1), mais seule
+    NET-SSH-OPEN-001 a un correctif IaC vérifié dans SUPPORTED_RULES (gitops_pr_generator.py) ;
+    IAM-STALE-ROLE-001/CERT-EXPIRED-001 restent Tier 1 sans jamais générer de PR (voir le
+    docstring de packages/detection/rules/iac_tier1_extra.py).
+    """
     tier_1 = {r for r, t in RULE_TIER_MAPPING.items() if t == Tier.TIER_1}
-    assert tier_1 == {"NET-001", "STORAGE-PUBLIC-001", "IAM-001", "CIS-003", "CIS-011"}
+    assert tier_1 == {
+        "NET-001",
+        "STORAGE-PUBLIC-001",
+        "IAM-001",
+        "CIS-003",
+        "CIS-011",
+        "IAM-STALE-ROLE-001",
+        "NET-SSH-OPEN-001",
+        "CERT-EXPIRED-001",
+    }
 
 
 def test_tier_4_rules_are_never_automatable_even_with_perfect_confidence():

@@ -22,8 +22,9 @@ from packages.core.models.node import CuzNode
 
 
 def test_nodetype_count():
-    """24 types de nœuds : 22 du P0 + BUSINESS_PROCESS et BUSINESS_FUNCTION (P1.16)."""
-    assert len(NodeType) == 24
+    """25 types de nœuds : 22 du P0 + BUSINESS_PROCESS/BUSINESS_FUNCTION (P1.16) + CERTIFICATE
+    (P2.10 bis, DEC-004)."""
+    assert len(NodeType) == 25
 
 
 def test_nodetype_infrastructure_values():

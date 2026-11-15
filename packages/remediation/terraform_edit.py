@@ -28,6 +28,10 @@ class AlreadyPrivateError(Exception):
     pass
 
 
+class AlreadyClosedError(Exception):
+    """P2.10 bis : le CIDR 0.0.0.0/0 n'est plus présent, l'écart est côté infra, pas le code."""
+
+
 @dataclass(frozen=True)
 class ResourceBlock:
     type: str
@@ -58,6 +62,7 @@ _HEREDOC = re.compile(r"<<-?([A-Za-z_][A-Za-z0-9_]*)")
 _HEADER = re.compile(r'(?:^|\n)[ \t]*resource[ \t]+"([^"\n]+)"[ \t]+"([^"\n]+)"[ \t]*$')
 _ATTRIBUTE = re.compile(r"^[ \t]*([A-Za-z_][A-Za-z0-9_-]*)[ \t]*=[ \t]*(.*?)[ \t]*$")
 _LITERAL = re.compile(r'^"([^"\\$%]*)"(?:[ \t]*(?:#.*|//.*))?$')
+_STRING_LIST_ITEM = re.compile(r'"([^"\\$%]*)"')
 
 
 def _depths(text: str) -> list[int]:
@@ -179,6 +184,16 @@ def _literal(raw: str) -> str | None:
     return m.group(1) if m else None
 
 
+_LIST_SHAPE = re.compile(r'^\[\s*(?:"[^"\\$%]*"\s*(?:,\s*"[^"\\$%]*"\s*)*,?\s*)?\]$', re.S)
+
+
+def _literal_string_list(raw: str) -> list[str] | None:
+    """Liste de littéraux `["a", "b"]` uniquement : toute interpolation/variable -> None."""
+    if not _LIST_SHAPE.match(raw.strip()):
+        return None
+    return _STRING_LIST_ITEM.findall(raw)
+
+
 def locate_bucket(text: str, bucket: str, resource_types: frozenset[str]) -> list[ResourceBlock]:
     """Blocs `resource` de ces types dont l'attribut `bucket` est le littéral `bucket`."""
     return [
@@ -207,4 +222,37 @@ def make_bucket_private(text: str, block: ResourceBlock) -> TerraformEdit:
     anchor = next(a for a in attrs if a.name == "bucket")
     inserted = f'{anchor.eol}{anchor.indent}acl = "private"'
     after = text[: anchor.line_end] + inserted + text[anchor.line_end :]
+    return TerraformEdit(text, after, block)
+
+
+# ── P2.10 bis (DEC-004) : NET-SSH-OPEN-001 ───────────────────────────────────────────────
+
+
+def locate_security_group_rule(
+    text: str, rule_name: str, resource_types: frozenset[str]
+) -> list[ResourceBlock]:
+    """Blocs `resource` de ces types dont le NOM Terraform (2e chaîne de l'en-tête) est
+    `rule_name` — à la différence du bucket, une règle réseau se retrouve par son nom de
+    ressource, elle n'a pas d'attribut `bucket` qui joue ce rôle."""
+    return [
+        b for b in find_resource_blocks(text) if b.type in resource_types and b.name == rule_name
+    ]
+
+
+def close_open_cidr(text: str, block: ResourceBlock) -> TerraformEdit:
+    """Retire `0.0.0.0/0` de `cidr_blocks`. Lève AlreadyClosedError si absent (dérive infra, pas
+    un correctif de code), NonLiteralValueError si `cidr_blocks` n'est pas une liste de littéraux."""
+    attrs = _attributes(text, block)
+    cidr = next((a for a in attrs if a.name == "cidr_blocks"), None)
+    if cidr is None:
+        raise NonLiteralValueError("cidr_blocks absent")
+    values = _literal_string_list(cidr.raw)
+    if values is None:
+        raise NonLiteralValueError(f"cidr_blocks = {cidr.raw}")
+    if "0.0.0.0/0" not in values:
+        raise AlreadyClosedError(block.name)
+    remaining = [v for v in values if v != "0.0.0.0/0"]
+    rendered = "[" + ", ".join(f'"{v}"' for v in remaining) + "]"
+    replaced = f"{cidr.indent}cidr_blocks = {rendered}"
+    after = text[: cidr.line_start] + replaced + text[cidr.line_end :]
     return TerraformEdit(text, after, block)

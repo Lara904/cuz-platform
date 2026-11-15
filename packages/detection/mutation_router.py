@@ -72,6 +72,10 @@ RULE_TRIGGERS: dict[str, Trigger] = {
     "CIS-010": Trigger(node_props=_t("plaintext_secret")),
     "CIS-011": Trigger(node_types=_t("ROLE")),
     "CIS-012": Trigger(node_types=_t("API")),
+    # P2.10 bis (DEC-004)
+    "IAM-STALE-ROLE-001": Trigger(node_types=_t("ROLE"), node_props=_t("role_unused_90d")),
+    "NET-SSH-OPEN-001": Trigger(node_types=_t("NETWORK"), node_props=_t("port_22_exposed")),
+    "CERT-EXPIRED-001": Trigger(node_types=_t("CERTIFICATE"), node_props=_t("cert_expired")),
 }
 
 

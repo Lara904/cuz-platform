@@ -8,12 +8,21 @@ from packages.connectors.cloud_detection.mapper import deduplicate_against_cyphe
 from packages.detection.dedup import deduplicate
 from packages.detection.models import Finding
 from packages.detection.opa_client import OPAClient, OPAError
-from packages.detection.rules import attack_path, cis, dora, iac, iam, network, shadow_it
+from packages.detection.rules import (
+    attack_path,
+    cis,
+    dora,
+    iac,
+    iac_tier1_extra,
+    iam,
+    network,
+    shadow_it,
+)
 from packages.graph.client import Neo4jClient
 
 logger = logging.getLogger(__name__)
 
-ALL_RULE_MODULES = [network, iam, attack_path, dora, cis, iac, shadow_it]
+ALL_RULE_MODULES = [network, iam, attack_path, dora, cis, iac, iac_tier1_extra, shadow_it]
 
 
 class DetectionRunner:

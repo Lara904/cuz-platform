@@ -38,6 +38,13 @@ RULE_TIER_MAPPING: dict[str, Tier] = {
     "IAM-001": Tier.TIER_1,  # identité sans MFA -> PR forçant la policy MFA (si gérée en IaC)
     "CIS-003": Tier.TIER_1,  # service sans owner -> PR ajoutant le tag
     "CIS-011": Tier.TIER_1,  # rôle admin permanent -> PR réduisant la portée du rôle
+    # ── P2.10 bis (DEC-004) : 3 types Tier 1 supplémentaires, fixtures AcmeCorp fictives ─
+    # Tier 1 car réversibles par nature (révoquer/fermer/renouveler), MAIS IAM-STALE-ROLE-001
+    # et CERT-EXPIRED-001 n'ont pas de correctif IaC déterministe sûr : can_automate() les
+    # autorise, SUPPORTED_RULES (gitops_pr_generator.py) les refuse quand même, explicitement.
+    "IAM-STALE-ROLE-001": Tier.TIER_1,  # rôle inutilisé >90j -> à désactiver (pas de PR auto)
+    "NET-SSH-OPEN-001": Tier.TIER_1,  # port 22 ouvert à 0.0.0.0/0 -> PR fermant le CIDR
+    "CERT-EXPIRED-001": Tier.TIER_1,  # certificat expiré -> renouvellement (pas de PR auto)
     # ── Tier 2 : un jumeau avant exécution (Phase 3, P3.8/P3.9) ─────────────────────────
     "K8S-PRIV-001": Tier.TIER_2,  # pod privileged -> SecurityContext à tester
     "IAC-DRIFT-001": Tier.TIER_2,  # resynchronisation IaC, impact difficile à prévoir à l'aveugle

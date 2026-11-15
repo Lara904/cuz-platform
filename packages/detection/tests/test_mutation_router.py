@@ -231,8 +231,10 @@ def test_batch_unions_rules_of_different_mutations():
 
 
 def test_batch_with_nothing_routed_opens_no_session():
+    # NodeType.NETWORK a désormais un trigger (NET-SSH-OPEN-001, P2.10 bis) : VIRTUAL_MACHINE
+    # reste un type qu'aucune règle ne couvre.
     router, calls = _router()
-    result = router.run_on_mutations(TENANT, [_node_event(NodeType.NETWORK)])
+    result = router.run_on_mutations(TENANT, [_node_event(NodeType.VIRTUAL_MACHINE)])
     assert result.rules_run == 0 and calls == []
 
 

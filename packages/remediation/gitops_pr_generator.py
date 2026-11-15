@@ -35,11 +35,14 @@ from packages.detection.tier_classifier import (
     classify,
 )
 from packages.remediation.terraform_edit import (
+    AlreadyClosedError,
     AlreadyPrivateError,
     HCLError,
     NonLiteralValueError,
     TerraformEdit,
+    close_open_cidr,
     locate_bucket,
+    locate_security_group_rule,
     make_bucket_private,
 )
 
@@ -51,6 +54,8 @@ MAX_TF_FILE_BYTES = 1_000_000
 
 # Types de ressources dont l'attribut `acl` pilote l'accès public (ceux que le connecteur Terraform reconnaît)
 BUCKET_RESOURCE_TYPES = frozenset({"minio_s3_bucket", "minio_bucket", "aws_s3_bucket"})
+# P2.10 bis (DEC-004) : règle réseau dont le CIDR pilote l'exposition du port 22
+NSG_RESOURCE_TYPES = frozenset({"aws_security_group_rule"})
 
 AuditHook = Callable[[str, str], Awaitable[None]]  # (action, détail)
 
@@ -82,11 +87,15 @@ class PullRequestResult:
 # Règles Tier 1 pour lesquelles une correction IaC vérifiée existe dans ce SI.
 SUPPORTED_RULES: dict[str, str] = {
     "STORAGE-PUBLIC-001": "CIS 2.1.1 (buckets privés par défaut) / DORA Art. 9 (protection des données)",
+    # P2.10 bis (DEC-004) : fixtures fictives AcmeCorp, correctif déterministe vérifié (terraform_edit.py)
+    "NET-SSH-OPEN-001": "CIS 5.2 (pas d'accès SSH ouvert à Internet) / DORA Art. 9 (protection des données)",
 }
 UNSUPPORTED_REASON = (
     "aucune stratégie de correction IaC vérifiée pour cette règle dans ce SI (NET-001 : aucune ressource "
     "réseau Terraform gérée ; IAM-001 : identités Entra hors IaC ; CIS-003 : propriétaire inconnu, il "
-    "faut une décision humaine ; CIS-011 : aucune ressource de rôle gérée)"
+    "faut une décision humaine ; CIS-011 : aucune ressource de rôle gérée ; IAM-STALE-ROLE-001 : "
+    "désactiver un rôle sans vérifier ses dépendances ne serait pas déterministe ; CERT-EXPIRED-001 : "
+    "le renouvellement se fait hors IaC (CA/ACM), aucun diff Terraform ne le corrige)"
 )
 
 
@@ -218,21 +227,19 @@ class GitOpsPRGenerator:
             why = f"confiance {finding.confidence_score:.2f} < {MIN_CONFIDENCE_FOR_AUTOMATION} (RÈGLE 3)"
         raise PermissionError(f"PR refusée (RÈGLE 7) : {why}")
 
-    def _plan(
-        self, finding: Finding, files: dict[str, tuple[str, str]]
-    ) -> tuple[str, str, TerraformEdit]:
-        """(asset, chemin, modification) ou RemediationNotApplicableError."""
-        if finding.rule_id not in SUPPORTED_RULES:
-            raise RemediationNotApplicableError(UNSUPPORTED_REASON)
-        if len(finding.affected_node_names) != 1:
-            raise RemediationNotApplicableError(
-                "le finding vise plusieurs actifs : une PR par actif est requise"
-            )
-        asset = finding.affected_node_names[0]
+    def _locate_single(
+        self,
+        asset: str,
+        files: dict[str, tuple[str, str]],
+        locate: Callable[[str, str, frozenset[str]], list[Any]],
+        resource_types: frozenset[str],
+    ) -> tuple[str, str, Any]:
+        """(chemin, texte, bloc) unique correspondant à `asset`, ou RemediationNotApplicableError
+        si aucun ou plusieurs (ambigu) — factorisé entre tous les types de ressources P2.10/bis."""
         matches: list[tuple[str, str, Any]] = []
         for path, (text, _sha) in files.items():
             try:
-                blocks = locate_bucket(text, asset, BUCKET_RESOURCE_TYPES)
+                blocks = locate(text, asset, resource_types)
             except HCLError as exc:
                 logger.warning("fichier %s non analysable, ignoré : %s", path, exc)
                 continue
@@ -246,9 +253,14 @@ class GitOpsPRGenerator:
             raise RemediationNotApplicableError(
                 "l'actif est déclaré plusieurs fois dans le dépôt IaC (ambigu)"
             )
-        path, text, block = matches[0]
+        return matches[0]
+
+    def _plan_bucket(
+        self, asset: str, files: dict[str, tuple[str, str]]
+    ) -> tuple[str, TerraformEdit]:
+        path, text, block = self._locate_single(asset, files, locate_bucket, BUCKET_RESOURCE_TYPES)
         try:
-            return asset, path, make_bucket_private(text, block)
+            return path, make_bucket_private(text, block)
         except AlreadyPrivateError as exc:
             raise RemediationNotApplicableError(
                 "le code IaC est déjà privé : l'écart est côté infrastructure réelle (dérive), "
@@ -258,6 +270,44 @@ class GitOpsPRGenerator:
             raise RemediationNotApplicableError(
                 "l'attribut acl n'est pas un littéral : modification non déterministe"
             ) from exc
+
+    def _plan_security_group_rule(
+        self, asset: str, files: dict[str, tuple[str, str]]
+    ) -> tuple[str, TerraformEdit]:
+        path, text, block = self._locate_single(
+            asset, files, locate_security_group_rule, NSG_RESOURCE_TYPES
+        )
+        try:
+            return path, close_open_cidr(text, block)
+        except AlreadyClosedError as exc:
+            raise RemediationNotApplicableError(
+                "0.0.0.0/0 n'est déjà plus dans cidr_blocks : l'écart est côté infrastructure "
+                "réelle (dérive), corriger par terraform apply et non par une PR"
+            ) from exc
+        except NonLiteralValueError as exc:
+            raise RemediationNotApplicableError(
+                "cidr_blocks n'est pas une liste de littéraux : modification non déterministe"
+            ) from exc
+
+    _PLANNERS: dict[str, str] = {
+        "STORAGE-PUBLIC-001": "_plan_bucket",
+        "NET-SSH-OPEN-001": "_plan_security_group_rule",
+    }
+
+    def _plan(
+        self, finding: Finding, files: dict[str, tuple[str, str]]
+    ) -> tuple[str, str, TerraformEdit]:
+        """(asset, chemin, modification) ou RemediationNotApplicableError."""
+        if finding.rule_id not in SUPPORTED_RULES:
+            raise RemediationNotApplicableError(UNSUPPORTED_REASON)
+        if len(finding.affected_node_names) != 1:
+            raise RemediationNotApplicableError(
+                "le finding vise plusieurs actifs : une PR par actif est requise"
+            )
+        asset = finding.affected_node_names[0]
+        planner = getattr(self, self._PLANNERS[finding.rule_id])
+        path, edit = planner(asset, files)
+        return asset, path, edit
 
     def build_pr_body(self, finding: Finding, asset: str, path: str, diff: str, actor: str) -> str:
         return self._jinja.get_template("pr_body.md.j2").render(

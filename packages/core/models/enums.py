@@ -30,6 +30,7 @@ class NodeType(StrEnum):
     # Sécurité
     VULNERABILITY = "VULNERABILITY"
     THIRD_PARTY = "THIRD_PARTY"
+    CERTIFICATE = "CERTIFICATE"  # P2.10 bis : aws_acm_certificate (CERT-EXPIRED-001)
     # Contract legacy
     CONTRACT = "CONTRACT"
     # P1.16 : réconciliation métier↔IT

@@ -33,6 +33,12 @@ NATIVE_PROMOTED_KEYS = [
     "account_enabled",
     "package_name",
     "owner_deployment",
+    # P2.10 bis (DEC-004) : NET-001 attendait déjà port_22_exposed sans qu'aucun connecteur ne
+    # le promeuve — corrigé ici. role_unused_90d/cert_expired : nouveaux dérivés du connecteur
+    # Terraform (packages/connectors/terraform/mapper.py) pour IAM-STALE-ROLE-001/CERT-EXPIRED-001.
+    "port_22_exposed",
+    "role_unused_90d",
+    "cert_expired",
 ]
 
 # Neo4j n'accepte pas les maps comme valeur de propriété : la criticité DICT

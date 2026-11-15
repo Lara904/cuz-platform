@@ -18,6 +18,57 @@ RESOURCE_TYPE_TO_NODE_TYPE = {
     "aws_s3_bucket": NodeType.STORAGE,
     "azurerm_storage_account": NodeType.STORAGE,
     "aws_instance": NodeType.SERVER,
+    # P2.10 bis (DEC-004) : fixtures fictives couvrant les 3 autres exemples Tier 1 du guide
+    "aws_iam_role": NodeType.ROLE,
+    "aws_security_group_rule": NodeType.NETWORK,
+    "aws_acm_certificate": NodeType.CERTIFICATE,
+}
+
+# P2.10 bis : seuil au-delà duquel un rôle IAM est considéré inutilisé (IAM-STALE-ROLE-001).
+ROLE_UNUSED_THRESHOLD_DAYS = 90
+
+
+def _role_attributes(attrs: dict[str, Any], now: datetime) -> dict[str, Any]:
+    last_used = attrs.get("last_used_date")
+    if not last_used:
+        return {}
+    last_used_dt = datetime.fromisoformat(str(last_used).replace("Z", "+00:00"))
+    age_days = (now - last_used_dt).days
+    return {"role_unused_90d": age_days > ROLE_UNUSED_THRESHOLD_DAYS, "role_unused_days": age_days}
+
+
+def _security_group_rule_attributes(attrs: dict[str, Any]) -> dict[str, Any]:
+    from_port = attrs.get("from_port")
+    to_port = attrs.get("to_port")
+    protocol = attrs.get("protocol")
+    cidrs = attrs.get("cidr_blocks") or []
+    port_22_exposed = (
+        isinstance(from_port, int)
+        and isinstance(to_port, int)
+        and from_port <= 22 <= to_port
+        and protocol in ("tcp", "-1")
+    )
+    return {
+        "port_22_exposed": bool(port_22_exposed),
+        "is_public": "0.0.0.0/0" in cidrs,
+    }
+
+
+def _certificate_attributes(attrs: dict[str, Any], now: datetime) -> dict[str, Any]:
+    not_after = attrs.get("not_after")
+    if not not_after:
+        return {}
+    not_after_dt = datetime.fromisoformat(str(not_after).replace("Z", "+00:00"))
+    return {"cert_expired": not_after_dt < now}
+
+
+# P2.10 bis : attributs dérivés (booléens prêts pour un filtre Cypher natif, cf. FIX-3 du
+# GraphWriter) par type de ressource. Rien n'est deviné : une fixture sans l'attribut source
+# attendu (last_used_date, cidr_blocks, not_after) ne produit simplement aucun dérivé.
+DERIVED_ATTRIBUTES: dict[str, Any] = {
+    "aws_iam_role": _role_attributes,
+    "aws_security_group_rule": lambda attrs, _now: _security_group_rule_attributes(attrs),
+    "aws_acm_certificate": _certificate_attributes,
 }
 
 
@@ -30,10 +81,15 @@ class TerraformMapper:
         if node_type is None:
             return None
         attrs = resource.get("attributes", {})
-        # Le nom réel de la ressource : bucket pour minio, sinon nom Terraform
-        name = attrs.get("bucket") or resource["name"]
+        # Le nom réel de la ressource : bucket pour minio, nom/domaine pour les types P2.10 bis,
+        # sinon nom Terraform.
+        name = (
+            attrs.get("bucket") or attrs.get("domain_name") or attrs.get("name") or resource["name"]
+        )
         last_seen = datetime.now(UTC)
         external_id = f"{resource['type']}.{resource['name']}"
+        derive = DERIVED_ATTRIBUTES.get(resource["type"])
+        derived = derive(attrs, last_seen) if derive else {}
         return CuzNode(
             tenant_id=self.tenant_id,
             node_type=node_type,
@@ -44,7 +100,11 @@ class TerraformMapper:
             freshness_score=compute_freshness(node_type, last_seen),
             sources=["terraform"],
             last_seen=last_seen,
-            attributes={"tf_type": resource["type"], "namespace": attrs.get("namespace")},
+            attributes={
+                "tf_type": resource["type"],
+                "namespace": attrs.get("namespace"),
+                **derived,
+            },
             tags={"source": "terraform", "iac_managed": "true", "tf_type": resource["type"]},
         )
 

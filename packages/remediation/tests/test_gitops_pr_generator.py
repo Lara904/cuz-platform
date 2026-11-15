@@ -52,6 +52,34 @@ NON_LITERAL_TF = """resource "minio_s3_bucket" "x" {
 
 DUPLICATE_TF = PUBLIC_TF + PUBLIC_TF
 
+# P2.10 bis (DEC-004)
+SSH_OPEN_TF = """resource "aws_security_group_rule" "ssh_open_world" {
+  from_port   = 22
+  to_port     = 22
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+"""
+
+SSH_ALREADY_CLOSED_TF = SSH_OPEN_TF.replace('["0.0.0.0/0"]', '["10.0.0.0/8"]')
+
+
+def _nsg_finding(**overrides) -> Finding:
+    base = dict(
+        tenant_id="acmecorp",
+        rule_id="NET-SSH-OPEN-001",
+        severity="CRITICAL",
+        title="Règle réseau avec le port 22 ouvert à 0.0.0.0/0",
+        description="ssh_open_world autorise le port SSH depuis n'importe quelle adresse.",
+        affected_nodes=["node-nsg-ssh"],
+        affected_node_names=["ssh_open_world"],
+        remediation_hint="Restreindre ou fermer le CIDR.",
+        confidence_score=0.9,
+        status="open",
+    )
+    base.update(overrides)
+    return Finding(**base)
+
 
 def _finding(**overrides) -> Finding:
     base = dict(
@@ -310,8 +338,10 @@ async def test_unsupported_rule_is_refused_with_explicit_reason():
 
 
 def test_unsupported_rules_are_exactly_the_tier1_rules_without_a_verified_fix():
-    assert set(SUPPORTED_RULES) == {"STORAGE-PUBLIC-001"}
+    # P2.10 bis (DEC-004) : NET-SSH-OPEN-001 a désormais un correctif IaC vérifié (close_open_cidr)
+    assert set(SUPPORTED_RULES) == {"STORAGE-PUBLIC-001", "NET-SSH-OPEN-001"}
     assert "NET-001" in UNSUPPORTED_REASON and "IAM-001" in UNSUPPORTED_REASON
+    assert "IAM-STALE-ROLE-001" in UNSUPPORTED_REASON and "CERT-EXPIRED-001" in UNSUPPORTED_REASON
 
 
 @pytest.mark.asyncio
@@ -435,3 +465,52 @@ async def test_gitea_error_does_not_leak_the_admin_token_in_its_message():
     with pytest.raises(GitOpsError) as exc_info:
         await gen.generate_pr(_finding())
     assert ADMIN_TOKEN not in str(exc_info.value)
+
+
+# ── P2.10 bis (DEC-004) : NET-SSH-OPEN-001, deuxième type de ressource supportée ─────────
+
+
+@pytest.mark.asyncio
+async def test_generate_pr_for_ssh_open_rule_closes_the_cidr():
+    gitea = FakeGitea(tf_files={"network/sg.tf": SSH_OPEN_TF})
+    gen = _generator(gitea)
+    result = await gen.generate_pr(_nsg_finding())
+
+    assert result.created is True
+    assert result.file_path == "network/sg.tf"
+    assert gitea.branches_created == [branch_name(_nsg_finding())]
+    # le diff réellement committé ferme bien le CIDR, rien d'autre
+    put_calls = [c for c in gitea.calls if c == ("PUT", "/contents/network/sg.tf")]
+    assert put_calls
+
+
+@pytest.mark.asyncio
+async def test_ssh_rule_already_closed_is_treated_as_drift_not_a_code_fix():
+    gitea = FakeGitea(tf_files={"network/sg.tf": SSH_ALREADY_CLOSED_TF})
+    gen = _generator(gitea)
+    with pytest.raises(RemediationNotApplicableError, match="dérive"):
+        await gen.generate_pr(_nsg_finding())
+
+
+@pytest.mark.asyncio
+async def test_ssh_rule_not_in_iac_is_refused():
+    gitea = FakeGitea(tf_files={"network/sg.tf": PUBLIC_TF})  # pas de ssh_open_world
+    gen = _generator(gitea)
+    with pytest.raises(RemediationNotApplicableError, match="pas géré"):
+        await gen.generate_pr(_nsg_finding())
+
+
+@pytest.mark.asyncio
+async def test_cert_expired_and_iam_stale_role_findings_are_refused_even_at_tier1():
+    """Tier 1 (classify()) mais pas dans SUPPORTED_RULES : aucune PR, raison explicite."""
+    gitea = FakeGitea()
+    gen = _generator(gitea)
+    with pytest.raises(RemediationNotApplicableError, match="CERT-EXPIRED-001"):
+        await gen.generate_pr(
+            _nsg_finding(rule_id="CERT-EXPIRED-001", affected_node_names=["legacy.acmecorp.local"])
+        )
+    with pytest.raises(RemediationNotApplicableError, match="IAM-STALE-ROLE-001"):
+        await gen.generate_pr(
+            _nsg_finding(rule_id="IAM-STALE-ROLE-001", affected_node_names=["stale-admin-role"])
+        )
+    assert gitea.branches_created == []

@@ -20,9 +20,10 @@ def _state(tmp_path: Path, resources: list[dict]) -> Path:
 
 
 def test_pull_full_returns_one_event_per_instance():
+    # 3 ressources P0 (frontend/backend/acmecorp-archive) + 3 fixtures P2.10 bis (DEC-004)
     conn = TerraformConnector(TENANT, {"path": DEFAULT_TFSTATE})
     events = asyncio.run(conn.pull_full())
-    assert len(events) == 3
+    assert len(events) == 6
     assert all(e.source == "terraform" and e.tenant_id == TENANT for e in events)
 
 
@@ -126,3 +127,109 @@ def test_aws_and_azure_types_are_mapped():
         mapper.map_resource({"type": "aws_instance", "name": "i", "attributes": {}}).node_type
         == NodeType.SERVER
     )
+
+
+# ── P2.10 bis (DEC-004) : rôle IAM, règle réseau, certificat ────────────────────────────
+
+
+def test_stale_iam_role_is_mapped_to_role_with_unused_flag():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_iam_role",
+            "name": "stale_admin_role",
+            "attributes": {"name": "stale-admin-role", "last_used_date": "2026-05-01T00:00:00Z"},
+        }
+    )
+    assert node.node_type == NodeType.ROLE
+    assert node.name == "stale-admin-role"
+    assert node.attributes["role_unused_90d"] is True
+    assert node.attributes["role_unused_days"] > 90
+
+
+def test_recently_used_iam_role_is_not_flagged_unused():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_iam_role",
+            "name": "active_role",
+            "attributes": {"name": "active-role", "last_used_date": "2026-11-01T00:00:00Z"},
+        }
+    )
+    assert node.attributes["role_unused_90d"] is False
+
+
+def test_ssh_open_security_group_rule_is_mapped_to_network_with_both_flags():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_security_group_rule",
+            "name": "ssh_open_world",
+            "attributes": {
+                "from_port": 22,
+                "to_port": 22,
+                "protocol": "tcp",
+                "cidr_blocks": ["0.0.0.0/0"],
+            },
+        }
+    )
+    assert node.node_type == NodeType.NETWORK
+    assert node.attributes["port_22_exposed"] is True
+    assert node.attributes["is_public"] is True
+
+
+def test_security_group_rule_restricted_to_a_private_cidr_is_not_flagged_public():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_security_group_rule",
+            "name": "ssh_bastion_only",
+            "attributes": {
+                "from_port": 22,
+                "to_port": 22,
+                "protocol": "tcp",
+                "cidr_blocks": ["10.0.0.0/8"],
+            },
+        }
+    )
+    assert node.attributes["port_22_exposed"] is True
+    assert node.attributes["is_public"] is False
+
+
+def test_security_group_rule_for_another_port_is_not_flagged_ssh_exposed():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_security_group_rule",
+            "name": "https_open",
+            "attributes": {
+                "from_port": 443,
+                "to_port": 443,
+                "protocol": "tcp",
+                "cidr_blocks": ["0.0.0.0/0"],
+            },
+        }
+    )
+    assert node.attributes["port_22_exposed"] is False
+
+
+def test_expired_certificate_is_mapped_to_certificate_with_expired_flag():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_acm_certificate",
+            "name": "expired_cert",
+            "attributes": {
+                "domain_name": "legacy.acmecorp.local",
+                "not_after": "2026-01-01T00:00:00Z",
+            },
+        }
+    )
+    assert node.node_type == NodeType.CERTIFICATE
+    assert node.name == "legacy.acmecorp.local"
+    assert node.attributes["cert_expired"] is True
+
+
+def test_valid_certificate_is_not_flagged_expired():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_acm_certificate",
+            "name": "valid_cert",
+            "attributes": {"domain_name": "acmecorp.local", "not_after": "2099-01-01T00:00:00Z"},
+        }
+    )
+    assert node.attributes["cert_expired"] is False

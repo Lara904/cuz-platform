@@ -2,11 +2,14 @@
 import pytest
 
 from packages.remediation.terraform_edit import (
+    AlreadyClosedError,
     AlreadyPrivateError,
     HCLError,
     NonLiteralValueError,
+    close_open_cidr,
     find_resource_blocks,
     locate_bucket,
+    locate_security_group_rule,
     make_bucket_private,
 )
 
@@ -144,3 +147,63 @@ def test_crlf_insertion_uses_crlf_too():
     assert (
         after == 'resource "aws_s3_bucket" "x" {\r\n  bucket = "b1"\r\n  acl = "private"\r\n}\r\n'
     )
+
+
+# ── P2.10 bis (DEC-004) : NET-SSH-OPEN-001, close_open_cidr ─────────────────────────────
+
+NSG_TYPES = frozenset({"aws_security_group_rule"})
+
+SSH_OPEN = """resource "aws_security_group_rule" "ssh_open_world" {
+  from_port   = 22
+  to_port     = 22
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+"""
+
+
+def _close(text: str, name: str = "ssh_open_world"):
+    (block,) = locate_security_group_rule(text, name, NSG_TYPES)
+    return close_open_cidr(text, block)
+
+
+def test_located_by_terraform_resource_name_not_an_attribute():
+    assert len(locate_security_group_rule(SSH_OPEN, "ssh_open_world", NSG_TYPES)) == 1
+    assert locate_security_group_rule(SSH_OPEN, "autre", NSG_TYPES) == []
+
+
+def test_open_cidr_is_removed_and_nothing_else_changes():
+    edit = _close(SSH_OPEN)
+    assert 'cidr_blocks = ["0.0.0.0/0"]' not in edit.after
+    assert "cidr_blocks = []" in edit.after
+    changed = [
+        (a, b)
+        for a, b in zip(SSH_OPEN.splitlines(), edit.after.splitlines(), strict=True)
+        if a != b
+    ]
+    assert changed == [('  cidr_blocks = ["0.0.0.0/0"]', "  cidr_blocks = []")]
+
+
+def test_open_cidr_among_others_only_removes_that_entry():
+    text = SSH_OPEN.replace('["0.0.0.0/0"]', '["10.0.0.0/8", "0.0.0.0/0"]')
+    edit = _close(text)
+    assert 'cidr_blocks = ["10.0.0.0/8"]' in edit.after
+
+
+def test_already_closed_cidr_is_refused_it_is_infra_drift():
+    text = SSH_OPEN.replace('["0.0.0.0/0"]', '["10.0.0.0/8"]')
+    with pytest.raises(AlreadyClosedError):
+        _close(text)
+
+
+def test_non_literal_cidr_list_is_refused_not_guessed():
+    text = SSH_OPEN.replace('["0.0.0.0/0"]', "var.allowed_cidrs")
+    with pytest.raises(NonLiteralValueError):
+        _close(text)
+
+
+def test_missing_cidr_blocks_attribute_is_refused():
+    text = 'resource "aws_security_group_rule" "x" {\n  from_port = 22\n  to_port = 22\n}\n'
+    (block,) = locate_security_group_rule(text, "x", NSG_TYPES)
+    with pytest.raises(NonLiteralValueError):
+        close_open_cidr(text, block)
