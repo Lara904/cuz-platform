@@ -64,6 +64,23 @@ resources = [
             }
         ],
     },
+    # CIS-011 (DEC-004) : rôle admin "permanent" — 4e ressource Tier 1, avec cette fois un
+    # correctif IaC déterministe réel (permanent = true -> false), contrairement à
+    # stale_admin_role et expired_cert ci-dessus qui restent volontairement sans PR possible.
+    {
+        "type": "aws_iam_role",
+        "name": "permanent_admin_role",
+        "provider": "aws",
+        "instances": [
+            {
+                "attributes": {
+                    "name": "permanent-admin-role",
+                    "is_admin": True,
+                    "permanent": True,
+                }
+            }
+        ],
+    },
 ]
 
 tfstate = {"version": 4, "terraform_version": "1.7.0", "resources": resources}

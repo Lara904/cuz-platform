@@ -29,12 +29,21 @@ ROLE_UNUSED_THRESHOLD_DAYS = 90
 
 
 def _role_attributes(attrs: dict[str, Any], now: datetime) -> dict[str, Any]:
+    derived: dict[str, Any] = {}
     last_used = attrs.get("last_used_date")
-    if not last_used:
-        return {}
-    last_used_dt = datetime.fromisoformat(str(last_used).replace("Z", "+00:00"))
-    age_days = (now - last_used_dt).days
-    return {"role_unused_90d": age_days > ROLE_UNUSED_THRESHOLD_DAYS, "role_unused_days": age_days}
+    if last_used:
+        last_used_dt = datetime.fromisoformat(str(last_used).replace("Z", "+00:00"))
+        age_days = (now - last_used_dt).days
+        derived["role_unused_90d"] = age_days > ROLE_UNUSED_THRESHOLD_DAYS
+        derived["role_unused_days"] = age_days
+    # CIS-011 (admin permanent) : simple passage de l'attribut fixture au nœud, rien de calculé —
+    # contrairement à role_unused_90d/cert_expired, is_admin/permanent n'ont pas d'équivalent réel
+    # dans le schéma Terraform aws_iam_role, c'est une convention propre aux fixtures CUz.
+    if "is_admin" in attrs:
+        derived["is_admin"] = bool(attrs["is_admin"])
+    if "permanent" in attrs:
+        derived["permanent"] = bool(attrs["permanent"])
+    return derived
 
 
 def _security_group_rule_attributes(attrs: dict[str, Any]) -> dict[str, Any]:

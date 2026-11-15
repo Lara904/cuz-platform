@@ -32,6 +32,10 @@ class AlreadyClosedError(Exception):
     """P2.10 bis : le CIDR 0.0.0.0/0 n'est plus présent, l'écart est côté infra, pas le code."""
 
 
+class AlreadyNotPermanentError(Exception):
+    """P2.10 bis : `permanent` est déjà `false`, l'écart est côté infra, pas le code."""
+
+
 @dataclass(frozen=True)
 class ResourceBlock:
     type: str
@@ -63,6 +67,7 @@ _HEADER = re.compile(r'(?:^|\n)[ \t]*resource[ \t]+"([^"\n]+)"[ \t]+"([^"\n]+)"[
 _ATTRIBUTE = re.compile(r"^[ \t]*([A-Za-z_][A-Za-z0-9_-]*)[ \t]*=[ \t]*(.*?)[ \t]*$")
 _LITERAL = re.compile(r'^"([^"\\$%]*)"(?:[ \t]*(?:#.*|//.*))?$')
 _STRING_LIST_ITEM = re.compile(r'"([^"\\$%]*)"')
+_LITERAL_BOOL = re.compile(r"^(true|false)(?:[ \t]*(?:#.*|//.*))?$")
 
 
 def _depths(text: str) -> list[int]:
@@ -184,6 +189,12 @@ def _literal(raw: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _literal_bool(raw: str) -> bool | None:
+    """`true`/`false` HCL non quoté. Toute autre forme (variable, expression) -> None."""
+    m = _LITERAL_BOOL.match(raw.strip())
+    return (m.group(1) == "true") if m else None
+
+
 _LIST_SHAPE = re.compile(r'^\[\s*(?:"[^"\\$%]*"\s*(?:,\s*"[^"\\$%]*"\s*)*,?\s*)?\]$', re.S)
 
 
@@ -255,4 +266,36 @@ def close_open_cidr(text: str, block: ResourceBlock) -> TerraformEdit:
     rendered = "[" + ", ".join(f'"{v}"' for v in remaining) + "]"
     replaced = f"{cidr.indent}cidr_blocks = {rendered}"
     after = text[: cidr.line_start] + replaced + text[cidr.line_end :]
+    return TerraformEdit(text, after, block)
+
+
+# ── P2.10 bis (DEC-004) : CIS-011 (rôle admin permanent) ─────────────────────────────────
+
+
+def locate_role(text: str, role_name: str, resource_types: frozenset[str]) -> list[ResourceBlock]:
+    """Blocs `resource` de ces types dont l'attribut `name` est le littéral `role_name`
+    (même principe que `locate_bucket`, mais sur l'attribut `name` d'un rôle IAM)."""
+    return [
+        block
+        for block in find_resource_blocks(text)
+        if block.type in resource_types
+        and any(a.name == "name" and _literal(a.raw) == role_name for a in _attributes(text, block))
+    ]
+
+
+def revoke_permanent_admin(text: str, block: ResourceBlock) -> TerraformEdit:
+    """Force `permanent = false`. Lève AlreadyNotPermanentError si déjà `false` (dérive infra,
+    pas un correctif de code), NonLiteralValueError si `permanent` est absent ou n'est pas un
+    booléen littéral."""
+    attrs = _attributes(text, block)
+    permanent = next((a for a in attrs if a.name == "permanent"), None)
+    if permanent is None:
+        raise NonLiteralValueError("permanent absent")
+    current = _literal_bool(permanent.raw)
+    if current is None:
+        raise NonLiteralValueError(f"permanent = {permanent.raw}")
+    if current is False:
+        raise AlreadyNotPermanentError(block.name)
+    replaced = f"{permanent.indent}permanent = false"
+    after = text[: permanent.line_start] + replaced + text[permanent.line_end :]
     return TerraformEdit(text, after, block)

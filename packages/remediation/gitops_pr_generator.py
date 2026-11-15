@@ -36,14 +36,17 @@ from packages.detection.tier_classifier import (
 )
 from packages.remediation.terraform_edit import (
     AlreadyClosedError,
+    AlreadyNotPermanentError,
     AlreadyPrivateError,
     HCLError,
     NonLiteralValueError,
     TerraformEdit,
     close_open_cidr,
     locate_bucket,
+    locate_role,
     locate_security_group_rule,
     make_bucket_private,
+    revoke_permanent_admin,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +59,8 @@ MAX_TF_FILE_BYTES = 1_000_000
 BUCKET_RESOURCE_TYPES = frozenset({"minio_s3_bucket", "minio_bucket", "aws_s3_bucket"})
 # P2.10 bis (DEC-004) : règle réseau dont le CIDR pilote l'exposition du port 22
 NSG_RESOURCE_TYPES = frozenset({"aws_security_group_rule"})
+# P2.10 bis (DEC-004) : rôle IAM dont `permanent` pilote CIS-011
+ROLE_RESOURCE_TYPES = frozenset({"aws_iam_role"})
 
 AuditHook = Callable[[str, str], Awaitable[None]]  # (action, détail)
 
@@ -89,13 +94,14 @@ SUPPORTED_RULES: dict[str, str] = {
     "STORAGE-PUBLIC-001": "CIS 2.1.1 (buckets privés par défaut) / DORA Art. 9 (protection des données)",
     # P2.10 bis (DEC-004) : fixtures fictives AcmeCorp, correctif déterministe vérifié (terraform_edit.py)
     "NET-SSH-OPEN-001": "CIS 5.2 (pas d'accès SSH ouvert à Internet) / DORA Art. 9 (protection des données)",
+    "CIS-011": "CIS 1.16 (pas de rôle admin permanent) / DORA Art. 9 (moindre privilège)",
 }
 UNSUPPORTED_REASON = (
     "aucune stratégie de correction IaC vérifiée pour cette règle dans ce SI (NET-001 : aucune ressource "
     "réseau Terraform gérée ; IAM-001 : identités Entra hors IaC ; CIS-003 : propriétaire inconnu, il "
-    "faut une décision humaine ; CIS-011 : aucune ressource de rôle gérée ; IAM-STALE-ROLE-001 : "
-    "désactiver un rôle sans vérifier ses dépendances ne serait pas déterministe ; CERT-EXPIRED-001 : "
-    "le renouvellement se fait hors IaC (CA/ACM), aucun diff Terraform ne le corrige)"
+    "faut une décision humaine ; IAM-STALE-ROLE-001 : désactiver un rôle sans vérifier ses dépendances "
+    "ne serait pas déterministe ; CERT-EXPIRED-001 : le renouvellement se fait hors IaC (CA/ACM), aucun "
+    "diff Terraform ne le corrige)"
 )
 
 
@@ -289,9 +295,26 @@ class GitOpsPRGenerator:
                 "cidr_blocks n'est pas une liste de littéraux : modification non déterministe"
             ) from exc
 
+    def _plan_role(
+        self, asset: str, files: dict[str, tuple[str, str]]
+    ) -> tuple[str, TerraformEdit]:
+        path, text, block = self._locate_single(asset, files, locate_role, ROLE_RESOURCE_TYPES)
+        try:
+            return path, revoke_permanent_admin(text, block)
+        except AlreadyNotPermanentError as exc:
+            raise RemediationNotApplicableError(
+                "permanent est déjà false dans le code : l'écart est côté infrastructure réelle "
+                "(dérive), corriger par terraform apply et non par une PR"
+            ) from exc
+        except NonLiteralValueError as exc:
+            raise RemediationNotApplicableError(
+                "permanent est absent ou n'est pas un booléen littéral : modification non déterministe"
+            ) from exc
+
     _PLANNERS: dict[str, str] = {
         "STORAGE-PUBLIC-001": "_plan_bucket",
         "NET-SSH-OPEN-001": "_plan_security_group_rule",
+        "CIS-011": "_plan_role",
     }
 
     def _plan(

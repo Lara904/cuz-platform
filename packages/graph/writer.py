@@ -39,6 +39,10 @@ NATIVE_PROMOTED_KEYS = [
     "port_22_exposed",
     "role_unused_90d",
     "cert_expired",
+    # P2.10 bis (DEC-004) : CIS-011 attendait déjà is_admin/permanent sans qu'aucun connecteur
+    # ne les promeuve (cf. commentaire "non produites" dans cis.py) — corrigé ici.
+    "is_admin",
+    "permanent",
 ]
 
 # Neo4j n'accepte pas les maps comme valeur de propriété : la criticité DICT

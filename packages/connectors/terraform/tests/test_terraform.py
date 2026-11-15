@@ -20,10 +20,11 @@ def _state(tmp_path: Path, resources: list[dict]) -> Path:
 
 
 def test_pull_full_returns_one_event_per_instance():
-    # 3 ressources P0 (frontend/backend/acmecorp-archive) + 3 fixtures P2.10 bis (DEC-004)
+    # 3 ressources P0 (frontend/backend/acmecorp-archive) + 4 fixtures P2.10 bis (DEC-004)
+    # (rôle inutilisé, règle SSH ouverte, certificat expiré, rôle admin permanent CIS-011)
     conn = TerraformConnector(TENANT, {"path": DEFAULT_TFSTATE})
     events = asyncio.run(conn.pull_full())
-    assert len(events) == 6
+    assert len(events) == 7
     assert all(e.source == "terraform" and e.tenant_id == TENANT for e in events)
 
 
@@ -155,6 +156,33 @@ def test_recently_used_iam_role_is_not_flagged_unused():
         }
     )
     assert node.attributes["role_unused_90d"] is False
+
+
+def test_permanent_admin_role_is_mapped_with_is_admin_and_permanent():
+    # CIS-011 : is_admin/permanent sont passés tels quels (convention fixture, pas de calcul)
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_iam_role",
+            "name": "permanent_admin_role",
+            "attributes": {"name": "permanent-admin-role", "is_admin": True, "permanent": True},
+        }
+    )
+    assert node.node_type == NodeType.ROLE
+    assert node.name == "permanent-admin-role"
+    assert node.attributes["is_admin"] is True
+    assert node.attributes["permanent"] is True
+
+
+def test_role_without_is_admin_or_permanent_does_not_get_those_keys():
+    node = TerraformMapper(TENANT).map_resource(
+        {
+            "type": "aws_iam_role",
+            "name": "stale_admin_role",
+            "attributes": {"name": "stale-admin-role", "last_used_date": "2026-05-01T00:00:00Z"},
+        }
+    )
+    assert "is_admin" not in node.attributes
+    assert "permanent" not in node.attributes
 
 
 def test_ssh_open_security_group_rule_is_mapped_to_network_with_both_flags():

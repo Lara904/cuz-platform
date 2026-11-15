@@ -3,14 +3,17 @@ import pytest
 
 from packages.remediation.terraform_edit import (
     AlreadyClosedError,
+    AlreadyNotPermanentError,
     AlreadyPrivateError,
     HCLError,
     NonLiteralValueError,
     close_open_cidr,
     find_resource_blocks,
     locate_bucket,
+    locate_role,
     locate_security_group_rule,
     make_bucket_private,
+    revoke_permanent_admin,
 )
 
 TYPES = frozenset({"minio_s3_bucket", "aws_s3_bucket"})
@@ -207,3 +210,56 @@ def test_missing_cidr_blocks_attribute_is_refused():
     (block,) = locate_security_group_rule(text, "x", NSG_TYPES)
     with pytest.raises(NonLiteralValueError):
         close_open_cidr(text, block)
+
+
+# ── P2.10 bis (DEC-004) : CIS-011, revoke_permanent_admin ───────────────────────────────
+
+ROLE_TYPES = frozenset({"aws_iam_role"})
+
+ROLE_PERMANENT = """resource "aws_iam_role" "permanent_admin_role" {
+  name      = "permanent-admin-role"
+  is_admin  = true
+  permanent = true
+}
+"""
+
+
+def _revoke(text: str, name: str = "permanent-admin-role"):
+    (block,) = locate_role(text, name, ROLE_TYPES)
+    return revoke_permanent_admin(text, block)
+
+
+def test_role_located_by_name_attribute_not_resource_name():
+    assert len(locate_role(ROLE_PERMANENT, "permanent-admin-role", ROLE_TYPES)) == 1
+    assert locate_role(ROLE_PERMANENT, "permanent_admin_role", ROLE_TYPES) == []
+    assert locate_role(ROLE_PERMANENT, "autre", ROLE_TYPES) == []
+
+
+def test_permanent_is_flipped_to_false_and_nothing_else_changes():
+    edit = _revoke(ROLE_PERMANENT)
+    assert "permanent = false" in edit.after
+    changed = [
+        (a, b)
+        for a, b in zip(ROLE_PERMANENT.splitlines(), edit.after.splitlines(), strict=True)
+        if a != b
+    ]
+    assert changed == [("  permanent = true", "  permanent = false")]
+
+
+def test_already_not_permanent_is_refused_it_is_infra_drift():
+    text = ROLE_PERMANENT.replace("permanent = true", "permanent = false")
+    with pytest.raises(AlreadyNotPermanentError):
+        _revoke(text)
+
+
+def test_non_literal_permanent_is_refused_not_guessed():
+    text = ROLE_PERMANENT.replace("permanent = true", "permanent = var.is_permanent")
+    with pytest.raises(NonLiteralValueError):
+        _revoke(text)
+
+
+def test_missing_permanent_attribute_is_refused():
+    text = 'resource "aws_iam_role" "x" {\n  name = "x-role"\n}\n'
+    (block,) = locate_role(text, "x-role", ROLE_TYPES)
+    with pytest.raises(NonLiteralValueError):
+        revoke_permanent_admin(text, block)

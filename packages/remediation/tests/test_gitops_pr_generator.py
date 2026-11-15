@@ -63,6 +63,32 @@ SSH_OPEN_TF = """resource "aws_security_group_rule" "ssh_open_world" {
 
 SSH_ALREADY_CLOSED_TF = SSH_OPEN_TF.replace('["0.0.0.0/0"]', '["10.0.0.0/8"]')
 
+ROLE_PERMANENT_TF = """resource "aws_iam_role" "permanent_admin_role" {
+  name      = "permanent-admin-role"
+  is_admin  = true
+  permanent = true
+}
+"""
+
+ROLE_ALREADY_NOT_PERMANENT_TF = ROLE_PERMANENT_TF.replace("permanent = true", "permanent = false")
+
+
+def _role_finding(**overrides) -> Finding:
+    base = dict(
+        tenant_id="acmecorp",
+        rule_id="CIS-011",
+        severity="HIGH",
+        title="Rôle admin permanent",
+        description="permanent-admin-role est un rôle admin sans expiration (permanent).",
+        affected_nodes=["node-role-permanent-admin"],
+        affected_node_names=["permanent-admin-role"],
+        remediation_hint="Rendre le rôle temporaire (permanent = false).",
+        confidence_score=0.9,
+        status="open",
+    )
+    base.update(overrides)
+    return Finding(**base)
+
 
 def _nsg_finding(**overrides) -> Finding:
     base = dict(
@@ -338,10 +364,13 @@ async def test_unsupported_rule_is_refused_with_explicit_reason():
 
 
 def test_unsupported_rules_are_exactly_the_tier1_rules_without_a_verified_fix():
-    # P2.10 bis (DEC-004) : NET-SSH-OPEN-001 a désormais un correctif IaC vérifié (close_open_cidr)
-    assert set(SUPPORTED_RULES) == {"STORAGE-PUBLIC-001", "NET-SSH-OPEN-001"}
+    # P2.10 bis (DEC-004) : NET-SSH-OPEN-001 et CIS-011 ont désormais un correctif IaC vérifié
+    # (close_open_cidr, revoke_permanent_admin). IAM-STALE-ROLE-001 et CERT-EXPIRED-001 restent
+    # sans correctif déterministe sûr malgré leur Tier 1, par choix explicite (cf. UNSUPPORTED_REASON).
+    assert set(SUPPORTED_RULES) == {"STORAGE-PUBLIC-001", "NET-SSH-OPEN-001", "CIS-011"}
     assert "NET-001" in UNSUPPORTED_REASON and "IAM-001" in UNSUPPORTED_REASON
     assert "IAM-STALE-ROLE-001" in UNSUPPORTED_REASON and "CERT-EXPIRED-001" in UNSUPPORTED_REASON
+    assert "CIS-011" not in UNSUPPORTED_REASON
 
 
 @pytest.mark.asyncio
@@ -514,3 +543,35 @@ async def test_cert_expired_and_iam_stale_role_findings_are_refused_even_at_tier
             _nsg_finding(rule_id="IAM-STALE-ROLE-001", affected_node_names=["stale-admin-role"])
         )
     assert gitea.branches_created == []
+
+
+# ── P2.10 bis (DEC-004) : CIS-011, troisième type de ressource supportée ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_generate_pr_for_permanent_admin_role_revokes_permanent():
+    gitea = FakeGitea(tf_files={"iam/role.tf": ROLE_PERMANENT_TF})
+    gen = _generator(gitea)
+    result = await gen.generate_pr(_role_finding())
+
+    assert result.created is True
+    assert result.file_path == "iam/role.tf"
+    assert gitea.branches_created == [branch_name(_role_finding())]
+    put_calls = [c for c in gitea.calls if c == ("PUT", "/contents/iam/role.tf")]
+    assert put_calls
+
+
+@pytest.mark.asyncio
+async def test_role_already_not_permanent_is_treated_as_drift_not_a_code_fix():
+    gitea = FakeGitea(tf_files={"iam/role.tf": ROLE_ALREADY_NOT_PERMANENT_TF})
+    gen = _generator(gitea)
+    with pytest.raises(RemediationNotApplicableError, match="dérive"):
+        await gen.generate_pr(_role_finding())
+
+
+@pytest.mark.asyncio
+async def test_permanent_admin_role_not_in_iac_is_refused():
+    gitea = FakeGitea(tf_files={"iam/role.tf": PUBLIC_TF})  # pas de permanent_admin_role
+    gen = _generator(gitea)
+    with pytest.raises(RemediationNotApplicableError, match="pas géré"):
+        await gen.generate_pr(_role_finding())
