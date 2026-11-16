@@ -9,7 +9,6 @@ from packages.agents.kubernetes_agent import KubernetesAgent
 from packages.agents.network_agent import NetworkAgent
 from packages.agents.vault_jit_client import VaultJITClient
 from packages.detection.models import Finding, FindingStatus
-from packages.remediation.gitops_pr_generator import RemediationNotApplicableError
 
 TENANT = "acmecorp"
 
@@ -147,19 +146,79 @@ async def test_iam_agent_cis011_applies_direct_commit():
 
 
 @pytest.mark.asyncio
-async def test_iam_agent_iam001_refuses_explicitly_pending_graph_permission():
-    """DEC-006 : IAM-001 est Tier 1 (le gate RÈGLE 3/7 passe), mais aucune permission Graph
-    en écriture n'existe encore (choix de Lara, différé) --- _execute() doit refuser
-    explicitement, jamais un faux "mfa_enforced" comme l'ancien stub."""
+async def test_iam_agent_iam001_without_graph_client_refuses_explicitly():
+    """Pas de faux succès : sans client Graph configuré (Policy.ReadWrite.ConditionalAccess
+    pas encore accordée), on refuse plutôt que de prétendre "mfa_enforced" comme l'ancien
+    stub --- même logique que NetworkAgent sans client MinIO."""
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-5"}
     agent = IAMAgent(vault_client=client, audit_sink=MagicMock())
 
-    with pytest.raises(RemediationNotApplicableError):
+    with pytest.raises(RuntimeError):
         await agent.remediate(make_finding("IAM-001"))
 
     # RÈGLE 6 : même un refus en cours d'exécution révoque le credential déjà émis.
     client.revoke.assert_called_once_with("lease-5")
+
+
+@pytest.mark.asyncio
+async def test_iam_agent_iam001_creates_scoped_conditional_access_policy():
+    """DEC-006 : IAM-001 opérationnel --- une policy CA dédiée, scopée à l'utilisateur
+    unique du finding (jamais "All users"), créée via GraphConditionalAccessClient."""
+    client = MagicMock()
+    client.acquire_jit_credential.return_value = {"lease_id": "lease-6"}
+    graph_client = MagicMock()
+    graph_client.find_user_id_by_display_name = AsyncMock(return_value="entra-obj-123")
+    graph_client.create_mfa_policy_for_user = AsyncMock(
+        return_value={"id": "ca-pol-1", "displayName": "cuz-jit-mfa-entra-obj-123"}
+    )
+    agent = IAMAgent(vault_client=client, audit_sink=MagicMock(), graph_client=graph_client)
+
+    result = await agent.remediate(make_finding("IAM-001"))
+
+    assert result["action"] == "conditional_access_mfa_policy_created"
+    assert result["policy_id"] == "ca-pol-1"
+    graph_client.find_user_id_by_display_name.assert_called_once_with("srv-01")
+    graph_client.create_mfa_policy_for_user.assert_called_once_with("entra-obj-123")
+    client.revoke.assert_called_once_with("lease-6")
+
+
+@pytest.mark.asyncio
+async def test_iam_agent_iam001_refuses_protected_display_name_without_calling_graph():
+    """Garde-fou spécifique DEC-006 : un compte listé comme protégé (admin/break-glass)
+    n'est jamais ciblé, même si le finding le désigne --- refus avant tout appel Graph."""
+    client = MagicMock()
+    graph_client = MagicMock()
+    graph_client.find_user_id_by_display_name = AsyncMock()
+    graph_client.create_mfa_policy_for_user = AsyncMock()
+    agent = IAMAgent(
+        vault_client=client,
+        audit_sink=MagicMock(),
+        graph_client=graph_client,
+        protected_display_names=frozenset({"srv-01"}),
+    )
+
+    with pytest.raises(PermissionError):
+        await agent.remediate(make_finding("IAM-001"))
+
+    graph_client.find_user_id_by_display_name.assert_not_called()
+    graph_client.create_mfa_policy_for_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_iam_agent_iam001_refuses_when_user_ambiguous_or_not_found():
+    """Jamais d'action sur une cible incertaine : 0 ou plusieurs comptes portant ce nom
+    dans Entra ID -> refus fail-safe, pas de création de policy."""
+    client = MagicMock()
+    graph_client = MagicMock()
+    graph_client.find_user_id_by_display_name = AsyncMock(return_value=None)
+    graph_client.create_mfa_policy_for_user = AsyncMock()
+    agent = IAMAgent(vault_client=client, audit_sink=MagicMock(), graph_client=graph_client)
+
+    with pytest.raises(RuntimeError):
+        await agent.remediate(make_finding("IAM-001"))
+
+    graph_client.create_mfa_policy_for_user.assert_not_called()
 
 
 @pytest.mark.asyncio
