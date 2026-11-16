@@ -89,6 +89,17 @@ class PullRequestResult:
     created: bool  # False : PR déjà ouverte réutilisée
 
 
+@dataclass(frozen=True)
+class DirectApplyResult:
+    """Résultat de apply_direct() --- pas de notion de « réutilisée » : un second appel sur
+    un code déjà corrigé lève RemediationNotApplicableError (via _plan -> AlreadyXError),
+    ce qui est la bonne idempotence pour un commit direct (pas de PR à retrouver)."""
+
+    file_path: str
+    asset: str
+    commit_sha: str
+
+
 # Règles Tier 1 pour lesquelles une correction IaC vérifiée existe dans ce SI.
 SUPPORTED_RULES: dict[str, str] = {
     "STORAGE-PUBLIC-001": "CIS 2.1.1 (buckets privés par défaut) / DORA Art. 9 (protection des données)",
@@ -420,3 +431,45 @@ class GitOpsPRGenerator:
             pr = r.json()
             await self._record("gitops_pr_opened", f"{pr['html_url']}")
             return PullRequestResult(pr["number"], pr["html_url"], branch, path, created=True)
+
+    async def apply_direct(self, finding: Finding, actor: str = "cuz") -> DirectApplyResult:
+        """Variante sans PR pour les agents JIT (P2.11, DEC-006) : même planification
+        vérifiée (_check_allowed, _plan, mêmes AlreadyXError/NonLiteralValueError convertis
+        en RemediationNotApplicableError) que generate_pr(), mais commit DIRECTEMENT sur la
+        branche par défaut --- pas de branche dédiée, pas de PR, pas de revue humaine en
+        attente. Réservé aux agents JIT : BaseRemediationAgent.remediate() a déjà vérifié
+        can_automate_finding() (RÈGLE 3/7) avant d'appeler ceci ; _check_allowed() le
+        revérifie ici en défense en profondeur, exactement comme generate_pr().
+
+        Pas de notion de PR "déjà ouverte" à réutiliser ici : si le code est déjà corrigé,
+        _plan() lève RemediationNotApplicableError (dérive infra, pas un second correctif) ---
+        l'opération reste donc idempotente côté résultat, pas par une recherche de PR existante.
+        """
+        self._check_allowed(finding)
+        async with httpx.AsyncClient(
+            headers=self._headers, timeout=self._timeout, transport=self._transport
+        ) as client:
+            repo = (await self._call(client, "dépôt", "GET", "")).json()
+            default = repo["default_branch"]
+
+            files = await self._terraform_files(client, default)
+            asset, path, edit = self._plan(finding, files)
+
+            await self._record("gitops_direct_apply_requested", f"{default} {path}")
+            message = (
+                f"fix({finding.rule_id}): {asset} corrigé automatiquement par agent JIT "
+                f"({actor}) --- finding /api/v1/tenants/{finding.tenant_id}/findings/{finding.id}"
+            )[:500]
+            r = await self._call(
+                client, "commit direct du correctif", "PUT", f"/contents/{path}",
+                json={
+                    "branch": default,
+                    "sha": files[path][1],
+                    "content": base64.b64encode(edit.after.encode()).decode(),
+                    "message": message,
+                },
+            )  # fmt: skip
+            commit = r.json()
+            commit_sha = str(commit.get("commit", {}).get("sha", ""))
+            await self._record("gitops_direct_apply_committed", f"{path} {commit_sha}")
+            return DirectApplyResult(file_path=path, asset=asset, commit_sha=commit_sha)

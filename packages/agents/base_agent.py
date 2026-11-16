@@ -11,6 +11,15 @@ passer un finding Tier 2+ ou de confiance insuffisante dès lors que son rule_id
 dans handled_rule_ids. C'était un oubli, pas un choix : le pattern RÈGLE 3/7 est déjà la
 référence du repo pour toute action automatique (cf. tier_classifier.py). Voir
 DECISIONS.md, DEC-006 pour le détail de cet écart et de celui de vault_jit_client.py.
+
+DEC-006 (garde-fou minimal Tier 2) : can_automate_finding() reste le SEUL chemin
+d'autorisation pour le Tier 1 (inchangé). Pour le Tier 2 (K8S-PRIV-001, IAC-DRIFT-001),
+il n'existe toujours pas de jumeau numérique (Phase 3, P3.8/P3.9) --- mais un agent peut
+désormais fournir un _twin_check() réel (pas une simulation) qui, pour CE finding précis,
+vérifie contre le système cible réel qu'une action serait acceptée avant de l'exécuter
+(cf. KubernetesAgent). Par défaut, _twin_check() renvoie False : un agent qui ne
+l'implémente pas reste bloqué en Tier 2, comme avant. RÈGLE 3 (confiance, statut ouvert)
+s'applique dans tous les cas, avant même d'envisager un garde-fou Tier 2.
 """
 
 import uuid
@@ -19,7 +28,12 @@ from typing import Any, Protocol
 
 from packages.agents.vault_jit_client import VaultJITClient
 from packages.detection.models import Finding
-from packages.detection.tier_classifier import can_automate_finding
+from packages.detection.tier_classifier import (
+    MIN_CONFIDENCE_FOR_AUTOMATION,
+    Tier,
+    can_automate_finding,
+    classify,
+)
 
 
 class AuditSink(Protocol):
@@ -53,15 +67,34 @@ class BaseRemediationAgent(ABC):
     @abstractmethod
     async def _execute(self, finding: Finding, credential: dict[str, Any]) -> dict[str, Any]: ...
 
+    def _twin_check(self, finding: Finding) -> bool:
+        """Garde-fou minimal Tier 2 (DEC-006) --- PAS le jumeau numérique de Phase 3
+        (P3.8/P3.9) : par défaut, aucun --- un agent reste bloqué sur un finding Tier 2
+        tant qu'il ne fournit pas sa propre vérification réelle avant exécution
+        (cf. KubernetesAgent._twin_check pour l'implémentation de référence)."""
+        return False
+
+    def _is_authorized(self, finding: Finding) -> bool:
+        if can_automate_finding(finding):
+            return True
+        # RÈGLE 3 : même pour envisager un garde-fou Tier 2, le finding doit être ouvert
+        # et suffisamment confiant --- ce n'est jamais le garde-fou seul qui autorise.
+        if finding.status != "open" or finding.confidence_score < MIN_CONFIDENCE_FOR_AUTOMATION:
+            return False
+        if classify(finding.rule_id) != Tier.TIER_2:
+            return False
+        return self._twin_check(finding)
+
     async def remediate(self, finding: Finding) -> dict[str, Any]:
         if not self.can_handle(finding):
             raise ValueError(f"{self.__class__.__name__} ne gère pas {finding.rule_id}")
 
-        if not can_automate_finding(finding):
+        if not self._is_authorized(finding):
             # RÈGLE 3 (confidence_score >= 0.7, status == "open") + RÈGLE 7 (Tier 1
-            # uniquement) : un agent peut "gérer" une règle dans son périmètre
-            # (can_handle) sans pour autant être autorisé à agir sur CE finding précis.
-            # Fail-safe, comme can_automate_finding() partout ailleurs dans le repo.
+            # autonome ; Tier 2 seulement si _twin_check() réussit) : un agent peut "gérer"
+            # une règle dans son périmètre (can_handle) sans pour autant être autorisé à
+            # agir sur CE finding précis. Fail-safe, comme can_automate_finding() partout
+            # ailleurs dans le repo.
             raise PermissionError(
                 f"{finding.rule_id} n'est pas automatisable pour ce finding "
                 f"(tier={finding.tier}, confidence_score={finding.confidence_score}, "

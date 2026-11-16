@@ -1,5 +1,6 @@
 # packages/agents/tests/test_jit_agents.py
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -8,6 +9,7 @@ from packages.agents.kubernetes_agent import KubernetesAgent
 from packages.agents.network_agent import NetworkAgent
 from packages.agents.vault_jit_client import VaultJITClient
 from packages.detection.models import Finding, FindingStatus
+from packages.remediation.gitops_pr_generator import RemediationNotApplicableError
 
 TENANT = "acmecorp"
 
@@ -55,23 +57,59 @@ async def test_credential_revoked_even_on_execution_failure():
 
     agent = FailingAgent(vault_client=client, audit_sink=audit)
     with pytest.raises(RuntimeError):
-        await agent.remediate(make_finding("NET-001"))
+        await agent.remediate(make_finding("NET-SSH-OPEN-001"))
 
     client.revoke.assert_called_once_with("lease-1")
 
 
 @pytest.mark.asyncio
-async def test_remediate_succeeds_on_tier1_high_confidence_finding():
+async def test_network_agent_privatizes_bucket_via_minio():
+    """DEC-006 : STORAGE-PUBLIC-001 appelle réellement l'API MinIO (plus un stub)."""
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-2"}
     audit = MagicMock()
-    agent = NetworkAgent(vault_client=client, audit_sink=audit)
+    minio_client = MagicMock()
+    agent = NetworkAgent(vault_client=client, audit_sink=audit, minio_client=minio_client)
 
     result = await agent.remediate(make_finding("STORAGE-PUBLIC-001"))
 
-    assert result["action"] == "security_group_rule_closed_or_bucket_privatized"
-    client.acquire_jit_credential.assert_called_once_with("cuz-agent-network")
+    assert result["action"] == "bucket_privatized"
+    assert result["bucket"] == "srv-01"
+    minio_client.delete_bucket_policy.assert_called_once_with("srv-01")
     client.revoke.assert_called_once_with("lease-2")
+
+
+@pytest.mark.asyncio
+async def test_network_agent_without_minio_client_refuses_explicitly():
+    """Pas de faux succès : sans client MinIO configuré, on refuse plutôt que de prétendre
+    avoir agi (c'est précisément l'écart que corrige DEC-006 par rapport au stub d'origine)."""
+    client = MagicMock()
+    client.acquire_jit_credential.return_value = {"lease_id": "lease-x"}
+    agent = NetworkAgent(vault_client=client, audit_sink=MagicMock())
+
+    with pytest.raises(RuntimeError):
+        await agent.remediate(make_finding("STORAGE-PUBLIC-001"))
+
+
+@pytest.mark.asyncio
+async def test_network_agent_closes_ssh_via_direct_commit():
+    """DEC-006 : NET-SSH-OPEN-001 (remplace NET-001, qui ne peut jamais matcher un actif
+    réel --- cf. module docstring) commit directement sur Gitea via apply_direct()."""
+    from packages.remediation.gitops_pr_generator import DirectApplyResult
+
+    client = MagicMock()
+    client.acquire_jit_credential.return_value = {"lease_id": "lease-3"}
+    gitops = MagicMock()
+    gitops.apply_direct = AsyncMock(
+        return_value=DirectApplyResult(file_path="network.tf", asset="srv-01", commit_sha="abc123")
+    )
+    agent = NetworkAgent(vault_client=client, audit_sink=MagicMock(), gitops=gitops)
+
+    result = await agent.remediate(make_finding("NET-SSH-OPEN-001"))
+
+    assert result["action"] == "security_group_rule_closed"
+    assert result["commit_sha"] == "abc123"
+    gitops.apply_direct.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -90,11 +128,46 @@ async def test_agent_refuses_low_confidence_finding():
 
 
 @pytest.mark.asyncio
-async def test_kubernetes_agent_refuses_tier2_finding_despite_handling_it():
+async def test_iam_agent_cis011_applies_direct_commit():
+    """DEC-006 : CIS-011 commit directement sur Gitea via apply_direct() (opérationnel)."""
+    from packages.remediation.gitops_pr_generator import DirectApplyResult
+
+    client = MagicMock()
+    client.acquire_jit_credential.return_value = {"lease_id": "lease-4"}
+    gitops = MagicMock()
+    gitops.apply_direct = AsyncMock(
+        return_value=DirectApplyResult(file_path="iam.tf", asset="srv-01", commit_sha="def456")
+    )
+    agent = IAMAgent(vault_client=client, audit_sink=MagicMock(), gitops=gitops)
+
+    result = await agent.remediate(make_finding("CIS-011"))
+
+    assert result["action"] == "permanent_admin_role_revoked"
+    assert result["commit_sha"] == "def456"
+
+
+@pytest.mark.asyncio
+async def test_iam_agent_iam001_refuses_explicitly_pending_graph_permission():
+    """DEC-006 : IAM-001 est Tier 1 (le gate RÈGLE 3/7 passe), mais aucune permission Graph
+    en écriture n'existe encore (choix de Lara, différé) --- _execute() doit refuser
+    explicitement, jamais un faux "mfa_enforced" comme l'ancien stub."""
+    client = MagicMock()
+    client.acquire_jit_credential.return_value = {"lease_id": "lease-5"}
+    agent = IAMAgent(vault_client=client, audit_sink=MagicMock())
+
+    with pytest.raises(RemediationNotApplicableError):
+        await agent.remediate(make_finding("IAM-001"))
+
+    # RÈGLE 6 : même un refus en cours d'exécution révoque le credential déjà émis.
+    client.revoke.assert_called_once_with("lease-5")
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_agent_refuses_tier2_finding_without_cluster_configured():
     """DEC-006 : K8S-PRIV-001 est Tier 2 (tier_classifier.py), pas Tier 1 --- can_handle()
-    est vrai (la règle est dans le périmètre de l'agent) mais remediate() doit refuser,
-    RÈGLE 7 oblige, tant qu'aucun chemin de validation Tier 2 (jumeau, Phase 3) n'existe.
-    Cet agent est donc code-complet mais non opérationnel sur sa cible réelle aujourd'hui."""
+    est vrai (la règle est dans le périmètre de l'agent) mais remediate() refuse tant que
+    le garde-fou (_twin_check) échoue. Sans cluster configuré, il échoue toujours :
+    comportement inchangé par rapport à avant DEC-006."""
     client = MagicMock()
     audit = MagicMock()
     agent = KubernetesAgent(vault_client=client, audit_sink=audit)
@@ -106,6 +179,81 @@ async def test_kubernetes_agent_refuses_tier2_finding_despite_handling_it():
         await agent.remediate(finding)
 
     client.acquire_jit_credential.assert_not_called()
+
+
+def _fake_pod(name: str = "srv-01", namespace: str = "default", owned: bool = True):
+    containers = [SimpleNamespace(name="app")]
+    owner_refs = [SimpleNamespace(kind="ReplicaSet", name="api-7f9c8d")] if owned else []
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name, namespace=namespace, owner_references=owner_refs),
+        spec=SimpleNamespace(containers=containers),
+    )
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_agent_twin_check_passes_and_patches_owning_deployment():
+    """DEC-006 : garde-fou minimal réel --- un dry-run qui réussit contre l'API Kubernetes
+    autorise le Tier 2, et l'exécution patche le Deployment propriétaire (jamais le Pod,
+    dont le securityContext est immuable --- cf. module docstring)."""
+    pod = _fake_pod()
+    core_v1 = MagicMock()
+    core_v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(items=[pod])
+    apps_v1 = MagicMock()
+
+    client = MagicMock()
+    client.acquire_jit_credential.return_value = {"lease_id": "lease-6"}
+    agent = KubernetesAgent(
+        vault_client=client, audit_sink=MagicMock(), core_v1=core_v1, apps_v1=apps_v1
+    )
+
+    finding = make_finding("K8S-PRIV-001")
+    result = await agent.remediate(finding)
+
+    assert result["action"] == "deployment_security_context_patched"
+    assert result["deployment"] == "api"
+    assert apps_v1.patch_namespaced_deployment.call_count == 2  # dry-run puis réel
+    dry_run_call = apps_v1.patch_namespaced_deployment.call_args_list[0]
+    assert dry_run_call.kwargs["dry_run"] == ["All"]
+    real_call = apps_v1.patch_namespaced_deployment.call_args_list[1]
+    assert "dry_run" not in real_call.kwargs
+    client.revoke.assert_called_once_with("lease-6")
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_agent_twin_check_refuses_bare_pod():
+    """Un pod nu (pas de Deployment propriétaire) n'a pas de stratégie de correction
+    déterministe sûre --- refus explicite, jamais de suppression/recréation devinée."""
+    pod = _fake_pod(owned=False)
+    core_v1 = MagicMock()
+    core_v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(items=[pod])
+    apps_v1 = MagicMock()
+
+    agent = KubernetesAgent(
+        vault_client=MagicMock(), audit_sink=MagicMock(), core_v1=core_v1, apps_v1=apps_v1
+    )
+
+    with pytest.raises(PermissionError):
+        await agent.remediate(make_finding("K8S-PRIV-001"))
+
+    apps_v1.patch_namespaced_deployment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_agent_twin_check_refuses_when_dry_run_rejected():
+    """Le dry-run réel échoue (ex. admission/RBAC) --- refus fail-safe, pas de passage en
+    force vers l'exécution réelle."""
+    pod = _fake_pod()
+    core_v1 = MagicMock()
+    core_v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(items=[pod])
+    apps_v1 = MagicMock()
+    apps_v1.patch_namespaced_deployment.side_effect = RuntimeError("403 Forbidden")
+
+    agent = KubernetesAgent(
+        vault_client=MagicMock(), audit_sink=MagicMock(), core_v1=core_v1, apps_v1=apps_v1
+    )
+
+    with pytest.raises(PermissionError):
+        await agent.remediate(make_finding("K8S-PRIV-001"))
 
 
 def test_agents_have_disjoint_handled_rule_ids():

@@ -19,6 +19,7 @@ from packages.detection.models import Finding
 from packages.remediation.gitops_pr_generator import (
     SUPPORTED_RULES,
     UNSUPPORTED_REASON,
+    DirectApplyResult,
     GitOpsError,
     GitOpsPRGenerator,
     PullRequestResult,
@@ -190,7 +191,7 @@ class FakeGitea:
         if method == "PUT" and path.startswith("/contents/"):
             if self.fail_on == "commit":
                 return httpx.Response(500, text="boom")
-            return httpx.Response(200, json={})
+            return httpx.Response(200, json={"commit": {"sha": "committed-sha-123"}})
 
         if method == "POST" and path == "/pulls":
             if self.fail_on == "pull":
@@ -575,3 +576,53 @@ async def test_permanent_admin_role_not_in_iac_is_refused():
     gen = _generator(gitea)
     with pytest.raises(RemediationNotApplicableError, match="pas géré"):
         await gen.generate_pr(_role_finding())
+
+
+# ── P2.11 (DEC-006) : apply_direct(), commit direct sans PR pour les agents JIT ─────────
+
+
+@pytest.mark.asyncio
+async def test_apply_direct_commits_straight_to_default_branch_without_pr_or_branch():
+    gitea = FakeGitea(tf_files={"iam/role.tf": ROLE_PERMANENT_TF})
+    audited: list[tuple[str, str]] = []
+
+    async def audit(action: str, detail: str) -> None:
+        audited.append((action, detail))
+
+    gen = _generator(gitea, audit=audit)
+    result = await gen.apply_direct(_role_finding(), actor="agent-iam")
+
+    assert isinstance(result, DirectApplyResult)
+    assert result.file_path == "iam/role.tf"
+    assert result.asset == "permanent-admin-role"
+    assert result.commit_sha == "committed-sha-123"
+    # pas de branche, pas de PR --- commit direct sur la branche par défaut uniquement
+    assert gitea.branches_created == []
+    assert ("POST", "/branches") not in gitea.calls
+    assert ("POST", "/pulls") not in gitea.calls
+    put_calls = [c for c in gitea.calls if c == ("PUT", "/contents/iam/role.tf")]
+    assert put_calls
+    assert [a for a, _ in audited] == [
+        "gitops_direct_apply_requested",
+        "gitops_direct_apply_committed",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_apply_direct_still_enforces_regle_3_7_gate():
+    gitea = FakeGitea()
+    gen = _generator(gitea)
+    with pytest.raises(PermissionError, match="Tier"):
+        await gen.apply_direct(_role_finding(rule_id="CIS-001"))
+    assert gitea.calls == []  # refusé avant tout appel Gitea, comme generate_pr
+
+
+@pytest.mark.asyncio
+async def test_apply_direct_on_already_fixed_code_is_treated_as_drift_not_reapplied():
+    """Idempotence côté résultat : pas de notion de PR à réutiliser ici, mais un second
+    appel sur un code déjà corrigé doit refuser au lieu de recommettre inutilement."""
+    gitea = FakeGitea(tf_files={"iam/role.tf": ROLE_ALREADY_NOT_PERMANENT_TF})
+    gen = _generator(gitea)
+    with pytest.raises(RemediationNotApplicableError, match="dérive"):
+        await gen.apply_direct(_role_finding())
+    assert ("PUT", "/contents/iam/role.tf") not in gitea.calls
