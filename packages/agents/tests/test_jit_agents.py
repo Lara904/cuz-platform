@@ -48,7 +48,7 @@ async def test_credential_revoked_even_on_execution_failure():
     """RÈGLE 6 : révocation garantie même si _execute() lève une exception."""
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-1"}
-    audit = MagicMock()
+    audit = AsyncMock()  # DEC-007 : record() est une coroutine, awaitée par remediate()
 
     class FailingAgent(NetworkAgent):
         async def _execute(self, finding, credential):
@@ -66,7 +66,7 @@ async def test_network_agent_privatizes_bucket_via_minio():
     """DEC-006 : STORAGE-PUBLIC-001 appelle réellement l'API MinIO (plus un stub)."""
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-2"}
-    audit = MagicMock()
+    audit = AsyncMock()  # DEC-007
     minio_client = MagicMock()
     agent = NetworkAgent(vault_client=client, audit_sink=audit, minio_client=minio_client)
 
@@ -84,7 +84,7 @@ async def test_network_agent_without_minio_client_refuses_explicitly():
     avoir agi (c'est précisément l'écart que corrige DEC-006 par rapport au stub d'origine)."""
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-x"}
-    agent = NetworkAgent(vault_client=client, audit_sink=MagicMock())
+    agent = NetworkAgent(vault_client=client, audit_sink=AsyncMock())  # DEC-007
 
     with pytest.raises(RuntimeError):
         await agent.remediate(make_finding("STORAGE-PUBLIC-001"))
@@ -102,7 +102,7 @@ async def test_network_agent_closes_ssh_via_direct_commit():
     gitops.apply_direct = AsyncMock(
         return_value=DirectApplyResult(file_path="network.tf", asset="srv-01", commit_sha="abc123")
     )
-    agent = NetworkAgent(vault_client=client, audit_sink=MagicMock(), gitops=gitops)
+    agent = NetworkAgent(vault_client=client, audit_sink=AsyncMock(), gitops=gitops)  # DEC-007
 
     result = await agent.remediate(make_finding("NET-SSH-OPEN-001"))
 
@@ -137,7 +137,7 @@ async def test_iam_agent_cis011_applies_direct_commit():
     gitops.apply_direct = AsyncMock(
         return_value=DirectApplyResult(file_path="iam.tf", asset="srv-01", commit_sha="def456")
     )
-    agent = IAMAgent(vault_client=client, audit_sink=MagicMock(), gitops=gitops)
+    agent = IAMAgent(vault_client=client, audit_sink=AsyncMock(), gitops=gitops)  # DEC-007
 
     result = await agent.remediate(make_finding("CIS-011"))
 
@@ -152,7 +152,7 @@ async def test_iam_agent_iam001_without_graph_client_refuses_explicitly():
     stub --- même logique que NetworkAgent sans client MinIO."""
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-5"}
-    agent = IAMAgent(vault_client=client, audit_sink=MagicMock())
+    agent = IAMAgent(vault_client=client, audit_sink=AsyncMock())  # DEC-007
 
     with pytest.raises(RuntimeError):
         await agent.remediate(make_finding("IAM-001"))
@@ -172,7 +172,9 @@ async def test_iam_agent_iam001_creates_scoped_conditional_access_policy():
     graph_client.create_mfa_policy_for_user = AsyncMock(
         return_value={"id": "ca-pol-1", "displayName": "cuz-jit-mfa-entra-obj-123"}
     )
-    agent = IAMAgent(vault_client=client, audit_sink=MagicMock(), graph_client=graph_client)
+    agent = IAMAgent(
+        vault_client=client, audit_sink=AsyncMock(), graph_client=graph_client
+    )  # DEC-007
 
     result = await agent.remediate(make_finding("IAM-001"))
 
@@ -193,7 +195,7 @@ async def test_iam_agent_iam001_refuses_protected_display_name_without_calling_g
     graph_client.create_mfa_policy_for_user = AsyncMock()
     agent = IAMAgent(
         vault_client=client,
-        audit_sink=MagicMock(),
+        audit_sink=AsyncMock(),  # DEC-007
         graph_client=graph_client,
         protected_display_names=frozenset({"srv-01"}),
     )
@@ -213,7 +215,9 @@ async def test_iam_agent_iam001_refuses_when_user_ambiguous_or_not_found():
     graph_client = MagicMock()
     graph_client.find_user_id_by_display_name = AsyncMock(return_value=None)
     graph_client.create_mfa_policy_for_user = AsyncMock()
-    agent = IAMAgent(vault_client=client, audit_sink=MagicMock(), graph_client=graph_client)
+    agent = IAMAgent(
+        vault_client=client, audit_sink=AsyncMock(), graph_client=graph_client
+    )  # DEC-007
 
     with pytest.raises(RuntimeError):
         await agent.remediate(make_finding("IAM-001"))
@@ -262,7 +266,10 @@ async def test_kubernetes_agent_twin_check_passes_and_patches_owning_deployment(
     client = MagicMock()
     client.acquire_jit_credential.return_value = {"lease_id": "lease-6"}
     agent = KubernetesAgent(
-        vault_client=client, audit_sink=MagicMock(), core_v1=core_v1, apps_v1=apps_v1
+        vault_client=client,
+        audit_sink=AsyncMock(),
+        core_v1=core_v1,
+        apps_v1=apps_v1,  # DEC-007
     )
 
     finding = make_finding("K8S-PRIV-001")
