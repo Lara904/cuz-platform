@@ -20,6 +20,15 @@ vérifie contre le système cible réel qu'une action serait acceptée avant de 
 (cf. KubernetesAgent). Par défaut, _twin_check() renvoie False : un agent qui ne
 l'implémente pas reste bloqué en Tier 2, comme avant. RÈGLE 3 (confiance, statut ouvert)
 s'applique dans tous les cas, avant même d'envisager un garde-fou Tier 2.
+
+DEC-007 (P2.12, audit_sink devenu async) : AuditSink.record() est désormais une coroutine,
+AWAITÉE à chaque appel --- plus de fire-and-forget. L'ancien contrat synchrone (P2.11,
+écrit avant que packages/audit/ existe) était un simple duck-type en attendant
+l'implémentation réelle ; la implémenter en fire-and-forget (asyncio.create_task non
+attendu) aurait permis de perdre silencieusement un événement d'audit (DB indisponible,
+process tué juste après le retour de remediate()) --- exactement ce que RÈGLE 4 interdit
+("pas de changement d'état sans trace", cf. services/api/audit.py). Voir DECISIONS.md
+DEC-007 pour le détail de cet écart face au guide P2.12.
 """
 
 import uuid
@@ -37,11 +46,12 @@ from packages.detection.tier_classifier import (
 
 
 class AuditSink(Protocol):
-    """Interface minimale attendue de l'audit sink (P2.12, packages/audit/audit_sink.py,
-    pas encore implémenté au moment de P2.11). Duck-typing volontaire : un agent ne dépend
-    jamais d'une implémentation concrète, seulement de ce contrat."""
+    """Interface minimale attendue de l'audit sink (P2.12, packages/audit/audit_sink.py).
+    Duck-typing volontaire : un agent ne dépend jamais d'une implémentation concrète,
+    seulement de ce contrat. record() est une coroutine --- toujours awaitée par
+    remediate(), jamais en fire-and-forget (DEC-007)."""
 
-    def record(
+    async def record(
         self,
         event_type: str,
         action_id: str,
@@ -103,29 +113,34 @@ class BaseRemediationAgent(ABC):
 
         action_id = str(uuid.uuid4())
         credential = self.vault_client.acquire_jit_credential(self.vault_role)
-        self.audit_sink.record(
+        # finding_id passé explicitement (pas seulement dans payload) --- c'est une
+        # colonne indexée dédiée de audit_events (idx_audit_events_finding), pas un champ
+        # JSONB à parser pour retrouver "toutes les actions sur ce finding" (DEC-007).
+        await self.audit_sink.record(
             "jit_credential_acquired",
             action_id,
             {
                 "agent": self.__class__.__name__,
                 "role": self.vault_role,
                 "lease_id": credential["lease_id"],
-                "finding_id": finding.id,
             },
+            finding_id=finding.id,
         )
         try:
             result = await self._execute(finding, credential)
-            self.audit_sink.record(
+            await self.audit_sink.record(
                 "remediation_executed",
                 action_id,
-                {"agent": self.__class__.__name__, "finding_id": finding.id, "result": result},
+                {"agent": self.__class__.__name__, "result": result},
+                finding_id=finding.id,
             )
             return result
         finally:
             # Révocation SYSTÉMATIQUE, même en cas d'exception --- RÈGLE 6.
             revoked = self.vault_client.revoke(credential["lease_id"])
-            self.audit_sink.record(
+            await self.audit_sink.record(
                 "jit_credential_revoked",
                 action_id,
                 {"lease_id": credential["lease_id"], "revoked": revoked},
+                finding_id=finding.id,
             )

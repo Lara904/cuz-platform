@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
+from packages.audit.audit_sink import init_db as init_audit_events_db
 from packages.detection.opa_client import OPAClient, OPAError
 from services.api.audit import init_audit_db
 from services.api.er_audit import init_er_db
@@ -17,6 +18,7 @@ from services.api.findings_feed import FindingsFeed, feed_enabled
 from services.api.middleware.logging import LoggingMiddleware
 from services.api.middleware.rate_limit import RateLimitMiddleware
 from services.api.routers import (
+    audit,
     auth,
     connectors,
     coverage,
@@ -42,6 +44,9 @@ async def lifespan(app: FastAPI):
     await init_connectors_db()
     await init_audit_db()
     await init_er_db()
+    await (
+        init_audit_events_db()
+    )  # P2.12 : table audit_events (JIT/remédiation), distincte de finding_audit
     # Policies OPA : chargées dès le démarrage, et revérifiées avant chaque évaluation (auto-réparation).
     # Un échec ici n'empêche pas l'API de démarrer, il est journalisé et signalé par detection_errors.
     try:
@@ -100,6 +105,7 @@ app.include_router(exports.router)
 app.include_router(coverage.router)
 app.include_router(entity_resolution.router)
 app.include_router(webhooks.router)
+app.include_router(audit.router)
 
 
 @app.get("/", tags=["root"])
