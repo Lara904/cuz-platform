@@ -101,8 +101,9 @@ def test_no_mapping_entry_targets_a_nonexistent_rule():
 
 def test_there_are_26_classified_rules():
     # P2.10 bis (DEC-004) : +3 règles Cypher (IAM-STALE-ROLE-001, NET-SSH-OPEN-001, CERT-EXPIRED-001)
-    assert len(registered_rules()) == 24
-    assert len(RULE_TIER_MAPPING) == 29  # 24 Cypher + 5 OPA
+    # P2.13 (DEC-008) : +1 règle Cypher (DORA-CONCENTRATION-001)
+    assert len(registered_rules()) == 25
+    assert len(RULE_TIER_MAPPING) == 30  # 25 Cypher + 5 OPA
 
 
 # ── RÈGLE 7 : seul le Tier 1 s'automatise ───────────────────────────────────

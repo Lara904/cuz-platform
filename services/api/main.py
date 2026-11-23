@@ -23,6 +23,7 @@ from services.api.routers import (
     connectors,
     coverage,
     dashboard,
+    dora_compliance,
     entity_resolution,
     exports,
     findings,
@@ -106,6 +107,7 @@ app.include_router(coverage.router)
 app.include_router(entity_resolution.router)
 app.include_router(webhooks.router)
 app.include_router(audit.router)
+app.include_router(dora_compliance.router)
 
 
 @app.get("/", tags=["root"])

@@ -28,6 +28,7 @@ def test_rule_count_matches_defined_rules():
         "OAUTH-LATERAL-001",
         "ATTACK-PATH-001-PARTIAL",
         "DORA-THIRD-PARTY-001",
+        "DORA-CONCENTRATION-001",
     }
 
 

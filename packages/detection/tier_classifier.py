@@ -53,6 +53,7 @@ RULE_TIER_MAPPING: dict[str, Tier] = {
     "OAUTH-LATERAL-001": Tier.TIER_3,
     # ── Tier 4 : humain uniquement ──────────────────────────────────────────────────────
     "DORA-THIRD-PARTY-001": Tier.TIER_4,  # décision contractuelle, pas technique
+    "DORA-CONCENTRATION-001": Tier.TIER_4,  # diversification/plan de continuité, pas technique
     "SHADOW-IT-001": Tier.TIER_4,  # arbitrage métier (déclarer ou isoler l'actif)
     # ── Tier 0 : information seule ──────────────────────────────────────────────────────
     "IAM-OPA-001": Tier.TIER_0,
