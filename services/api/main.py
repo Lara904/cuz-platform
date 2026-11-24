@@ -28,6 +28,7 @@ from services.api.routers import (
     findings,
     graph,
     health,
+    tenant_onboarding,
     tenants,
     webhooks,
 )
@@ -97,6 +98,7 @@ app.add_middleware(RateLimitMiddleware)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(tenants.router)
+app.include_router(tenant_onboarding.router)
 app.include_router(connectors.router)
 app.include_router(findings.router)
 app.include_router(dashboard.router)
