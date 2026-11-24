@@ -29,12 +29,22 @@ mécanisme différent pour la même garantie :
    juste après le retour de remediate()), ce qui contredit directement RÈGLE 4.
 """
 
+import os
 from datetime import datetime
 from typing import Any
 
 import asyncpg
 
-DATABASE_URL_DEFAULT = "postgresql://cuz:cuzpassword@localhost:5432/cuzdb"
+# Lit DATABASE_URL (même convention que services/api/routers/tenants.py et
+# services/api/routers/connectors.py --- chacun calcule sa propre valeur par défaut
+# depuis l'environnement au chargement du module) : un DSN codé en dur ici, ignorant
+# DATABASE_URL, cassait le démarrage de l'API dès que les credentials Postgres réels
+# (POSTGRES_USER/PASSWORD du docker-compose de l'utilisateur) divergeaient de ce
+# défaut --- bug réel découvert par Lara au premier lancement de l'API complète
+# contre son propre Postgres (InvalidPasswordError sur l'utilisateur "cuz").
+DATABASE_URL_DEFAULT = os.getenv(
+    "DATABASE_URL", "postgresql://cuz:cuzpassword@localhost:5432/cuzdb"
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS audit_events (
