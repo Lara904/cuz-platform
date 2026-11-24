@@ -27,6 +27,35 @@ def test_normalize_servicenow_server():
     assert results[0].node.node_type.value == "SERVER"
 
 
+def test_normalize_servicenow_relationship_produces_edge():
+    """P2.13bis (FIX-1/P1.16) : cmdb_rel_ci devient une arête DEPENDS_ON,
+    au lieu d'être silencieusement ignoré."""
+    n = Normalizer()
+    raw = make_raw(
+        "servicenow",
+        {
+            "table": "cmdb_rel_ci",
+            "record": {"sys_id": "rel1", "parent": "tp001", "child": "app001", "type": "abc"},
+        },
+    )
+    results = n.normalize(raw)
+    assert len(results) == 1
+    assert results[0].node is None
+    assert results[0].edge is not None
+    assert results[0].edge.edge_type.value == "DEPENDS_ON"
+    assert results[0].edge.source_id == "servicenow:tp001"
+    assert results[0].edge.target_id == "servicenow:app001"
+
+
+def test_normalize_servicenow_relationship_missing_endpoint_produces_nothing():
+    n = Normalizer()
+    raw = make_raw(
+        "servicenow",
+        {"table": "cmdb_rel_ci", "record": {"sys_id": "rel2", "parent": "tp001"}},
+    )
+    assert n.normalize(raw) == []
+
+
 def test_normalize_minio_bucket():
     n = Normalizer()
     raw = make_raw(

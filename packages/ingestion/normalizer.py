@@ -63,9 +63,18 @@ class Normalizer:
         results: list[NormalizedEvent] = []
 
         if raw.source == "servicenow":
-            node = self._stamp(mapper.map_ci(raw.raw_data["table"], raw.raw_data["record"]))
-            if node:
-                results.append(self._wrap(raw, node=node))
+            table = raw.raw_data["table"]
+            record = raw.raw_data["record"]
+            if table == "cmdb_rel_ci":
+                # FIX-1 (P1.16) / P2.13bis : relation CMDB -> arête DEPENDS_ON,
+                # jusqu'ici silencieusement ignorée (cf. mapper.map_relationship).
+                edge = mapper.map_relationship(record)
+                if edge:
+                    results.append(self._wrap(raw, edge=edge))
+            else:
+                node = self._stamp(mapper.map_ci(table, record))
+                if node:
+                    results.append(self._wrap(raw, node=node))
 
         elif raw.source == "minio":
             node = self._stamp(mapper.map_bucket(raw.raw_data))

@@ -7,7 +7,7 @@ import pytest
 
 from packages.connectors.servicenow.connector import ServiceNowConnector
 from packages.connectors.servicenow.mapper import ServiceNowMapper
-from packages.core.models.enums import NodeType
+from packages.core.models.enums import EdgeType, NodeType
 
 TENANT = "acmecorp"
 INSTANCE = "https://dev353984.service-now.com"
@@ -107,6 +107,31 @@ def test_mapper_rel_ci_returns_none():
     rec = {"sys_id": "rel001", "parent": "a", "child": "b"}
     node = mapper.map_ci("cmdb_rel_ci", rec)
     assert node is None  # cmdb_rel_ci → arête, pas nœud
+
+
+# ── map_relationship (P2.13bis, FIX-1/P1.16) ──────────────────────────────────
+
+
+def test_map_relationship_builds_depends_on_edge():
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "rel001", "parent": "tp001", "child": "app001", "type": "somehash"}
+    edge = mapper.map_relationship(rec)
+    assert edge is not None
+    assert edge.edge_type == EdgeType.DEPENDS_ON
+    assert edge.source_id == "servicenow:tp001"
+    assert edge.target_id == "servicenow:app001"
+    assert edge.tenant_id == TENANT
+    assert edge.attributes["cmdb_rel_type_sys_id"] == "somehash"
+
+
+def test_map_relationship_returns_none_without_parent():
+    mapper = ServiceNowMapper(TENANT)
+    assert mapper.map_relationship({"sys_id": "rel002", "child": "app001"}) is None
+
+
+def test_map_relationship_returns_none_without_child():
+    mapper = ServiceNowMapper(TENANT)
+    assert mapper.map_relationship({"sys_id": "rel003", "parent": "tp001"}) is None
 
 
 def test_mapper_third_party_vendor():
