@@ -160,6 +160,65 @@ def test_mapper_service_without_vendor_type_stays_application():
     assert node.node_type == NodeType.APPLICATION
 
 
+# ── business_criticality -> BUSINESS_FUNCTION (P2.13bis / DEC-011) ──────────────────
+
+
+def test_mapper_critical_service_becomes_business_function():
+    """business_criticality='1' (OOB ServiceNow : "1 - most critical") sur un
+    cmdb_ci_service interne doit promouvoir le nœud en BUSINESS_FUNCTION, avec
+    criticality_raw='critical' promu dans attributes pour être filtrable par
+    DORA-CONCENTRATION-001 (packages/graph/writer.py, NATIVE_PROMOTED_KEYS)."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "svc002", "name": "SAP Payroll", "business_criticality": "1"}
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.BUSINESS_FUNCTION
+    assert node.attributes["criticality_raw"] == "critical"
+
+
+def test_mapper_somewhat_critical_service_becomes_business_function():
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "svc003", "name": "CRM interne", "business_criticality": "2"}
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.BUSINESS_FUNCTION
+    assert node.attributes["criticality_raw"] == "high"
+
+
+def test_mapper_low_criticality_service_stays_application():
+    """criticality_raw='low' est bien calculé et conservé (traçabilité), mais ne
+    déclenche pas de promotion en BUSINESS_FUNCTION -- seul 'critical'/'high' le fait,
+    même vocabulaire que la règle Cypher DORA-CONCENTRATION-001."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "svc004", "name": "Outil interne mineur", "business_criticality": "4"}
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.APPLICATION
+    assert node.attributes["criticality_raw"] == "low"
+
+
+def test_mapper_missing_business_criticality_stays_application():
+    """Valeur absente (le cas réel observé sur le PDI démo de Lara, non peuplé) : aucune
+    criticité devinée, le CI reste APPLICATION comme avant ce changement."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "svc005", "name": "internal-billing"}
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.APPLICATION
+    assert node.attributes["criticality_raw"] is None
+
+
+def test_mapper_third_party_vendor_ignores_business_criticality():
+    """Un prestataire tiers (u_vendor_type=third_party) reste THIRD_PARTY même si
+    business_criticality est renseigné -- c'est un prestataire, pas la fonction métier
+    qu'il supporte."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {
+        "sys_id": "tp003",
+        "name": "Acme-Payment-SaaS",
+        "u_vendor_type": "third_party",
+        "business_criticality": "1",
+    }
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.THIRD_PARTY
+
+
 @pytest.mark.live_integration("servicenow")
 @pytest.mark.asyncio
 @skip_if_instance_5xx

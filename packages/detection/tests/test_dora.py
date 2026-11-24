@@ -108,3 +108,33 @@ def test_concentration_cypher_filters_on_business_function_or_process_and_critic
     assert "BUSINESS_PROCESS" in cypher
     assert "criticality_raw" in cypher
     assert ">= 3" in cypher
+
+
+def test_concentration_cypher_accepts_supports_and_depends_on():
+    """DEC-011 : élargi au-delà de SUPPORTS seul -- aucun des types de relation
+    cmdb_rel_ci réels observés sur le PDI de Lara ne s'appelle "Supports", et
+    ServiceNowMapper.map_relationship() mappe tout en DEPENDS_ON (DEC-009). Sans cet
+    élargissement, aucune relation CMDB réelle ne pourrait jamais déclencher ce Finding."""
+    cypher = DORA_CONCENTRATION_001.cypher
+    assert "'SUPPORTS'" in cypher
+    assert "'DEPENDS_ON'" in cypher
+
+
+def test_concentration_rule_triggers_on_depends_on_edge_from_cmdb():
+    """Le Cypher réel tourne contre Neo4j (non simulé ici), donc ce test vérifie le
+    contrat au niveau de make_rule : une ligne retournée par le Cypher élargi produit
+    bien un Finding, qu'elle provienne d'une arête SUPPORTS ou DEPENDS_ON -- make_rule
+    ne sait pas d'où vient la ligne, seul le Cypher le détermine (testé ci-dessus)."""
+    session = _session(
+        [
+            {
+                "node_ids": ["tp1"],
+                "node_names": ["Acme-Payment-SaaS"],
+                "critical_functions_count": 3,
+                "function_names": ["SAP Payroll", "CRM interne", "Facturation"],
+            }
+        ]
+    )
+    findings = make_rule(DORA_CONCENTRATION_001)(session, TENANT)
+    assert len(findings) == 1
+    assert findings[0].rule_id == "DORA-CONCENTRATION-001"

@@ -25,19 +25,32 @@ RETURN [tp.id] AS node_ids, [tp.name] AS node_names
 # l'utilisait comme tel (bf.criticality_raw) sans qu'aucun code ne le promeuve jamais hors de
 # attributes (JSON) --- même catégorie de bug que port_22_exposed/is_admin avant lui (DEC-004/006).
 # Corrigé en promouvant criticality_raw dans NATIVE_PROMOTED_KEYS (packages/graph/writer.py).
+#
+# DEC-011 : filtre élargi à SUPPORTS *et* DEPENDS_ON. Le guide attendait un mapping
+# cmdb_rel_ci -> SUPPORTS ; vérifié sur le PDI réel de Lara (dev421064), aucun des 10 types
+# de relation cmdb_rel_ci réels ne s'appelle "Supports" (le plus proche est
+# "Depends on::Used by", déjà le mapping par défaut de ServiceNowMapper.map_relationship,
+# DEC-009). Inventer une correspondance type-par-type vers SUPPORTS sans preuve que
+# ServiceNow la documente ainsi serait une supposition non vérifiée -- la règle accepte donc
+# le DEPENDS_ON réel du CMDB au même titre que le SUPPORTS du CSV manuel (P1.16) : les deux
+# expriment la même réalité de risque (un tiers dont dépend une fonction métier critique).
 DORA_CONCENTRATION_001 = RuleSpec(
     rule_id="DORA-CONCENTRATION-001",
     severity="HIGH",
     title="Risque de concentration ICT tiers (DORA Art. 29)",
-    description="Un prestataire tiers supporte 3 fonctions ou processus métier critiques ou plus.",
+    description=(
+        "Un prestataire tiers supporte (SUPPORTS) ou est requis par (DEPENDS_ON) "
+        "3 fonctions ou processus métier critiques ou plus."
+    ),
     remediation_hint=(
         "Évaluer une stratégie de diversification ou documenter un plan de continuité "
         "spécifique pour ce prestataire."
     ),
     cypher="""
 MATCH (tp:CuzNode {tenant_id: $tenant_id, node_type: 'THIRD_PARTY'})
-MATCH (tp)-[:CUZ_EDGE {edge_type: 'SUPPORTS'}]->(bf:CuzNode)
-WHERE bf.node_type IN ['BUSINESS_FUNCTION', 'BUSINESS_PROCESS']
+MATCH (tp)-[r:CUZ_EDGE]->(bf:CuzNode)
+WHERE r.edge_type IN ['SUPPORTS', 'DEPENDS_ON']
+  AND bf.node_type IN ['BUSINESS_FUNCTION', 'BUSINESS_PROCESS']
   AND bf.criticality_raw IN ['critical', 'high']
 WITH tp, count(bf) AS critical_functions_count, collect(bf.name) AS function_names
 WHERE critical_functions_count >= 3
