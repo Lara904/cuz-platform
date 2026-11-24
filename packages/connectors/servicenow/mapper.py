@@ -2,7 +2,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from packages.core.models.enums import NodeType
+from packages.core.models.edge import CuzEdge
+from packages.core.models.enums import EdgeType, NodeType
 from packages.core.models.node import CuzNode
 from packages.core.scoring import compute_confidence, compute_freshness
 
@@ -59,4 +60,52 @@ class ServiceNowMapper:
                 "source": "servicenow",
                 "cmdb_table": table,
             },
+        )
+
+    def map_relationship(self, rec: dict[str, Any]) -> CuzEdge | None:
+        """cmdb_rel_ci -> CuzEdge (P2.13bis, FIX-1/P1.16).
+
+        Jusqu'ici ces enregistrements étaient silencieusement perdus : map_ci()
+        renvoie None pour cette table (arête, pas nœud) et rien d'autre ne les
+        traitait -- aucune relation CMDB réelle (une appli qui dépend d'une
+        base, un prestataire tiers qui dépend d'une appli interne, etc.)
+        n'atteignait jamais le graphe.
+
+        Construction de l'id : le connecteur (connector.py, CMDB_TABLES) place
+        cmdb_rel_ci en dernier, après les tables de CI -- les nœuds parent/
+        child existent donc déjà côté graphe au moment où cette arête est
+        traitée, dans le cas nominal d'un pull_full() séquentiel. Comme pour
+        toute arête de ce repo, UPSERT_EDGE_CYPHER (packages/graph/writer.py)
+        matche par id et ne lève aucune erreur si un nœud référencé n'existe
+        pas encore : l'arête est alors silencieusement non créée (même
+        comportement que les autres connecteurs, pas une limite introduite
+        ici). L'id est reconstruit sans aller chercher le nœud en base, selon
+        la même convention que Normalizer._stamp() : `{source}:{external_id}`,
+        et external_id = sys_id pour tout nœud ServiceNow (map_ci ci-dessus).
+
+        Limite assumée, à lever une fois un PDI accessible pour vérifier en
+        conditions réelles : sysparm_display_value=false (connector.py) fait
+        que `type` (référence vers cmdb_rel_type) arrive en sys_id brut,
+        illisible sans une requête supplémentaire sur cmdb_rel_type. Sans
+        accès à un PDI pour inspecter ce que ce champ contient réellement,
+        toute relation est mappée en EdgeType.DEPENDS_ON -- la sémantique par
+        défaut de ServiceNow ("Depends on::Used by") et celle de la quasi-
+        totalité des relations du seed AcmeCorp (scripts/seed_servicenow.py).
+        Le sys_id brut du type est conservé dans attributes pour ne pas
+        perdre l'information, en vue d'un futur raffinement."""
+        parent_id = rec.get("parent")
+        child_id = rec.get("child")
+        if not parent_id or not child_id:
+            return None
+        last_seen = datetime.now(UTC)
+        return CuzEdge(
+            tenant_id=self.tenant_id,
+            edge_type=EdgeType.DEPENDS_ON,
+            source_id=f"servicenow:{parent_id}",
+            target_id=f"servicenow:{child_id}",
+            confidence_score=compute_confidence(["servicenow"]),
+            freshness_score=compute_freshness(NodeType.APPLICATION, last_seen),
+            sources=["servicenow"],
+            last_seen=last_seen,
+            attributes={"cmdb_rel_type_sys_id": rec.get("type")},
         )
