@@ -79,6 +79,36 @@ async def _provision_tenant(tenant_id: str) -> None:
     # TODO P1 : appeler Neo4j driver et Kafka admin client
 
 
+class TenantAlreadyExistsError(Exception):
+    pass
+
+
+async def insert_tenant_row(payload: TenantCreate) -> TenantResponse:
+    """Insertion PostgreSQL du tenant — factorisée pour être appelée à la fois
+    par POST /api/v1/tenants (P0.8, ci-dessous) et par
+    POST /api/v1/tenants/onboard (P2.14, services/api/routers/tenant_onboarding.py),
+    pour ne jamais dupliquer l'INSERT (même principe que l'export ESA unique de
+    P2.13, DEC-008 point 5)."""
+    pool = await get_pool()
+    now = datetime.now(UTC)
+    async with pool.acquire() as conn:
+        existing = await conn.fetchrow("SELECT id FROM tenants WHERE id = $1", payload.id)
+        if existing:
+            raise TenantAlreadyExistsError(f"Le tenant '{payload.id}' existe déjà.")
+        row = await conn.fetchrow(
+            """
+            INSERT INTO tenants (id, name, description, status, created_at, updated_at)
+            VALUES ($1, $2, $3, 'active', $4, $4)
+            RETURNING *
+            """,
+            payload.id,
+            payload.name,
+            payload.description,
+            now,
+        )
+    return row_to_tenant(row)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -105,29 +135,13 @@ async def create_tenant(
     - Le topic Redpanda cuz.raw.{tenant_id}
     - L'entrée PostgreSQL pour l'audit trail
     """
-    pool = await get_pool()
-    now = datetime.now(UTC)
-    async with pool.acquire() as conn:
-        existing = await conn.fetchrow("SELECT id FROM tenants WHERE id = $1", payload.id)
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Le tenant '{payload.id}' existe déjà.",
-            )
-        row = await conn.fetchrow(
-            """
-            INSERT INTO tenants (id, name, description, status, created_at, updated_at)
-            VALUES ($1, $2, $3, 'active', $4, $4)
-            RETURNING *
-            """,
-            payload.id,
-            payload.name,
-            payload.description,
-            now,
-        )
+    try:
+        tenant = await insert_tenant_row(payload)
+    except TenantAlreadyExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     await _provision_tenant(payload.id)
-    return row_to_tenant(row)
+    return tenant
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)  # type: ignore[misc, untyped-decorator, unused-ignore]  # fastapi absent de l'env mypy : décorateur Any
