@@ -58,6 +58,13 @@ RULE_TRIGGERS: dict[str, Trigger] = {
         edge_types=_t("OWNS", "DEPENDS_ON", "AFFECTS"),
     ),
     "DORA-THIRD-PARTY-001": Trigger(node_types=_t("THIRD_PARTY"), edge_types=_t("SUPPORTS")),
+    # P2.13 (DEC-008) : une fonction/processus devenant critical/high, ou une nouvelle arête
+    # SUPPORTS, peut faire franchir le seuil de 3 fonctions critiques pour le prestataire.
+    "DORA-CONCENTRATION-001": Trigger(
+        node_types=_t("THIRD_PARTY", "BUSINESS_FUNCTION", "BUSINESS_PROCESS"),
+        edge_types=_t("SUPPORTS"),
+        node_props=_t("criticality_raw"),
+    ),
     "IAC-DRIFT-001": Trigger(node_types=_t("STORAGE", "CONTAINER"), node_props=_t("iac_managed")),
     "SHADOW-IT-001": Trigger(on_node_created=True),
     "CIS-001": Trigger(node_props=_t("tls_cert_expired")),

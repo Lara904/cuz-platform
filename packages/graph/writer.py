@@ -43,6 +43,10 @@ NATIVE_PROMOTED_KEYS = [
     # ne les promeuve (cf. commentaire "non produites" dans cis.py) — corrigé ici.
     "is_admin",
     "permanent",
+    # P2.13 (DEC-008) : DORA-CONCENTRATION-001 attendait bf.criticality_raw comme propriété
+    # native filtrable en Cypher, alors que business_process_loader.py (P1.16) ne le pose que
+    # dans attributes (JSON) — même bug que port_22_exposed/is_admin avant eux, corrigé ici.
+    "criticality_raw",
 ]
 
 # Neo4j n'accepte pas les maps comme valeur de propriété : la criticité DICT

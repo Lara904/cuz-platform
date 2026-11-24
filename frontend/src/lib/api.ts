@@ -173,3 +173,45 @@ export const decidePair = (tenant: string, pairId: string, decision: ErDecision,
   apiPost<{ status: string; pair_id: string; decision: ErDecision; graph_merge_applied: boolean }>(
     `/api/v1/tenants/${tenant}/entity-resolution/pairs/${pairId}/decide`, { decision, note },
   );
+
+// ── Module DORA complet (P2.13) ───────────────────────────────────────────────
+export interface DoraProvider {
+  provider_name: string;
+  provider_type: string;
+  exit_plan_status: string;
+  last_review_date: string;
+  supported_functions: string[];
+}
+
+export interface DoraRegister {
+  register: DoraProvider[];
+}
+
+// rule_id est toujours "DORA-CONCENTRATION-001" ici, mais on réutilise Finding pour ne pas
+// dupliquer un type déjà posé plus haut dans ce fichier.
+export interface DoraConcentrationFindings {
+  findings: Finding[];
+}
+
+export const fetchDoraRegister = (tenant: string) =>
+  apiGet<DoraRegister>(`/api/v1/tenants/${tenant}/compliance/dora/register`);
+
+export const fetchDoraConcentrationRisk = (tenant: string) =>
+  apiGet<DoraConcentrationFindings>(`/api/v1/tenants/${tenant}/compliance/dora/concentration-risk`);
+
+// L'export est protégé par Bearer token (RBAC VIEWER, services/api/routers/dora_compliance.py) :
+// un simple <a href> ne porterait pas l'en-tête Authorization, d'où ce téléchargement via blob.
+export async function downloadDoraEsaCsv(tenant: string): Promise<void> {
+  const t = token();
+  const res = await fetch(new URL(`/api/v1/tenants/${tenant}/compliance/dora/export/esa`, API_URL), {
+    headers: t ? { Authorization: `Bearer ${t}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText} : export ESA`);
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dora_esa_${tenant}.csv`;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
