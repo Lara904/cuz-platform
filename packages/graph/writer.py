@@ -187,7 +187,22 @@ class GraphWriter:
         self.producer.poll(0)
 
     def _upsert_node(self, session: Session, event: NormalizedEvent) -> None:
-        node = self.merger.merge_or_create(cast(CuzNode, event.node))
+        incoming = cast(CuzNode, event.node)
+        node = self.merger.merge_or_create(incoming)
+        # DIAGNOSTIC TEMPORAIRE (DEC-012, à retirer une fois le mystère résolu) :
+        # trace le node_type AVANT et APRÈS merge_or_create() pour les CI dont le
+        # mapper a calculé une criticité, afin de voir si c'est le merge (NodeMerger,
+        # "existing wins" sur node_type) qui écrase BUSINESS_FUNCTION en APPLICATION.
+        if incoming.attributes.get("criticality_raw") is not None:
+            logger.info(
+                "DEBUG criticality node=%s external_id=%s incoming.node_type=%s "
+                "(après merge) node.node_type=%s criticality_raw=%s",
+                incoming.name,
+                incoming.external_id,
+                incoming.node_type.value,
+                node.node_type.value,
+                node.attributes.get("criticality_raw"),
+            )
         params: dict[str, Any] = {
             "tenant_id": node.tenant_id,
             "external_id": node.external_id or node.id,
