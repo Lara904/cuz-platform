@@ -52,6 +52,34 @@ def _parse_criticality(rec: dict[str, Any]) -> str | None:
     return SERVICENOW_BUSINESS_CRITICALITY_MAP.get(str(raw).strip()[:1])
 
 
+def _ref_value(raw: Any) -> str | None:
+    """Dés-hydrate un champ de référence ServiceNow (DEC-012, point 4).
+
+    sysparm_display_value=false (seul réglage posé par connector.py) ne
+    supprime PAS l'enveloppe des champs de type référence : contrairement à un
+    champ string/choice classique (ex: busines_criticality, cf. DEC-011, qui
+    revient en chaîne simple), un champ référence (parent/child sur
+    cmdb_rel_ci, vers cmdb_ci ; type, vers cmdb_rel_type) revient en objet
+    `{"link": "...", "value": "<sys_id>"}`. Seul sysparm_exclude_reference_link
+    (non posé ici) supprimerait "link", et resterait de toute façon un objet
+    `{"value": ...}`, pas une chaîne. Sans cette dés-hydratation,
+    map_relationship() construisait un id du type
+    "servicenow:{'link': ..., 'value': ...}" qui ne matchait jamais l'id réel
+    du nœud (`servicenow:<sys_id>`, posé par Normalizer._stamp()) -- d'où les
+    arêtes DEPENDS_ON jamais créées (UPSERT_EDGE_CYPHER ne crée l'arête que si
+    les deux nœuds MATCH, sinon silencieux).
+
+    Accepte aussi une chaîne simple (PDI/version où le champ ne serait pas
+    dés-hydraté de cette façon, ou jeux de test), pour ne rien casser côté
+    tests existants."""
+    if isinstance(raw, dict):
+        value = raw.get("value")
+        return str(value) if value else None
+    if raw:
+        return str(raw)
+    return None
+
+
 class ServiceNowMapper:
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
@@ -137,18 +165,25 @@ class ServiceNowMapper:
         la même convention que Normalizer._stamp() : `{source}:{external_id}`,
         et external_id = sys_id pour tout nœud ServiceNow (map_ci ci-dessus).
 
+        BUG CORRIGÉ (DEC-012, point 4) : parent/child (et type) sont des champs
+        de référence ServiceNow -- voir _ref_value() ci-dessus pour le détail --
+        et arrivaient donc non dés-hydratés dans l'id reconstruit, cassant tout
+        MATCH côté UPSERT_EDGE_CYPHER. _ref_value() les ramène au sys_id brut
+        avant de construire l'id, qu'il s'agisse du format objet réel du PDI ou
+        d'une chaîne simple (compat tests existants / autres instances).
+
         Limite assumée, à lever une fois un PDI accessible pour vérifier en
-        conditions réelles : sysparm_display_value=false (connector.py) fait
-        que `type` (référence vers cmdb_rel_type) arrive en sys_id brut,
-        illisible sans une requête supplémentaire sur cmdb_rel_type. Sans
-        accès à un PDI pour inspecter ce que ce champ contient réellement,
-        toute relation est mappée en EdgeType.DEPENDS_ON -- la sémantique par
-        défaut de ServiceNow ("Depends on::Used by") et celle de la quasi-
-        totalité des relations du seed AcmeCorp (scripts/seed_servicenow.py).
-        Le sys_id brut du type est conservé dans attributes pour ne pas
-        perdre l'information, en vue d'un futur raffinement."""
-        parent_id = rec.get("parent")
-        child_id = rec.get("child")
+        conditions réelles : le sys_id de `type` (référence vers
+        cmdb_rel_type) reste illisible sans une requête supplémentaire sur
+        cmdb_rel_type. Sans accès à un PDI pour inspecter ce que cette table
+        contient réellement, toute relation est mappée en EdgeType.DEPENDS_ON
+        -- la sémantique par défaut de ServiceNow ("Depends on::Used by") et
+        celle de la quasi-totalité des relations du seed AcmeCorp
+        (scripts/seed_servicenow.py). Le sys_id du type est conservé dans
+        attributes pour ne pas perdre l'information, en vue d'un futur
+        raffinement."""
+        parent_id = _ref_value(rec.get("parent"))
+        child_id = _ref_value(rec.get("child"))
         if not parent_id or not child_id:
             return None
         last_seen = datetime.now(UTC)
@@ -161,5 +196,5 @@ class ServiceNowMapper:
             freshness_score=compute_freshness(NodeType.APPLICATION, last_seen),
             sources=["servicenow"],
             last_seen=last_seen,
-            attributes={"cmdb_rel_type_sys_id": rec.get("type")},
+            attributes={"cmdb_rel_type_sys_id": _ref_value(rec.get("type"))},
         )

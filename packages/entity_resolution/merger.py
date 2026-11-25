@@ -22,7 +22,20 @@ class NodeMerger:
         return merged
 
     def _merge(self, existing: CuzNode, incoming: CuzNode) -> CuzNode:
-        """Newest wins pour les attributs. Union pour sources/external_ids."""
+        """Newest wins pour les attributs. Union pour sources/external_ids.
+
+        BUG CORRIGÉ (DEC-012) : node_type était figé sur existing.node_type, donc
+        jamais mis à jour par un merge -- un cmdb_ci_service ServiceNow requalifié
+        en BUSINESS_FUNCTION par mapper.py::map_ci() (promotion par criticité)
+        restait bloqué sur son ancien node_type (ex: APPLICATION) dès qu'un
+        deuxième événement pour le même sys_id était vu dans la même exécution de
+        GraphWriter (resolver en mémoire -> is_dup=True -> _merge()). Le fix de
+        writer.py (ON MATCH SET, 76c83d8) ne suffisait donc pas : le node_type
+        qui lui arrivait était déjà figé en amont par ce merge. Incohérence qui
+        trahissait déjà le bug : compute_freshness() ci-dessous utilisait
+        incoming.node_type alors que le node_type réellement conservé était celui
+        d'existing -- les deux doivent être de la même source de vérité.
+        Newest wins pour node_type, comme pour le reste des attributs."""
         now = datetime.now(UTC)
         merged_ext = {**existing.external_ids, **incoming.external_ids}
         merged_sources = list(set(existing.sources + incoming.sources))
@@ -33,7 +46,7 @@ class NodeMerger:
         return CuzNode(
             id=existing.id,
             tenant_id=existing.tenant_id,
-            node_type=existing.node_type,
+            node_type=incoming.node_type,
             name=incoming.name,
             external_id=existing.external_id,
             external_ids=merged_ext,

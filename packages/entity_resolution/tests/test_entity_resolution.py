@@ -63,6 +63,45 @@ def test_merger_merges_multi_source():
     assert "servicenow" in merged2.sources
 
 
+def test_merger_updates_node_type_on_merge():
+    """Régression DEC-012, point 3 : un cmdb_ci_service ServiceNow requalifié
+    BUSINESS_FUNCTION par le mapper (promotion par criticité) ne doit pas
+    rester bloqué sur son ancien node_type (ex: APPLICATION) quand un second
+    événement pour le même sys_id est vu dans la même exécution de
+    GraphWriter (resolver en mémoire -> is_dup=True -> _merge()). Avant le
+    correctif, _merge() posait toujours node_type=existing.node_type."""
+    r = DeterministicResolver()
+    m = NodeMerger(r)
+    first = CuzNode(
+        tenant_id="acmecorp",
+        node_type=NodeType.APPLICATION,
+        name="Acme-Billing-Core",
+        external_id="sys_id_svc_001",
+        external_ids={"servicenow": "sys_id_svc_001"},
+        confidence_score=0.8,
+        freshness_score=0.9,
+        sources=["servicenow"],
+        last_seen=datetime.now(UTC),
+        attributes={"criticality_raw": None},
+    )
+    second = CuzNode(
+        tenant_id="acmecorp",
+        node_type=NodeType.BUSINESS_FUNCTION,
+        name="Acme-Billing-Core",
+        external_id="sys_id_svc_001",
+        external_ids={"servicenow": "sys_id_svc_001"},
+        confidence_score=0.8,
+        freshness_score=0.9,
+        sources=["servicenow"],
+        last_seen=datetime.now(UTC),
+        attributes={"criticality_raw": "critical"},
+    )
+    m.merge_or_create(first)
+    merged = m.merge_or_create(second)
+    assert merged.node_type == NodeType.BUSINESS_FUNCTION
+    assert merged.attributes["criticality_raw"] == "critical"
+
+
 def test_merger_confidence_increases_with_sources():
     r = DeterministicResolver()
     m = NodeMerger(r)

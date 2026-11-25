@@ -134,6 +134,49 @@ def test_map_relationship_returns_none_without_child():
     assert mapper.map_relationship({"sys_id": "rel003", "parent": "tp001"}) is None
 
 
+def test_map_relationship_dehydrates_reference_field_objects():
+    """Régression DEC-012, point 4 : avec sysparm_display_value=false (seul
+    réglage posé par connector.py), un champ de référence ServiceNow (parent/
+    child sur cmdb_rel_ci, vers cmdb_ci ; type, vers cmdb_rel_type) revient en
+    objet {"link": ..., "value": sys_id} -- pas en chaîne simple comme un champ
+    string/choice classique (busines_criticality). Avant le correctif,
+    source_id/target_id étaient construits avec cet objet tel quel, ne
+    matchant jamais l'id réel du nœud (servicenow:<sys_id>), d'où les arêtes
+    DEPENDS_ON jamais créées malgré des cmdb_rel_ci bien remontés côté
+    ServiceNow."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {
+        "sys_id": "rel001",
+        "parent": {
+            "link": "https://dev421064.service-now.com/api/now/table/cmdb_ci/tp001",
+            "value": "tp001",
+        },
+        "child": {
+            "link": "https://dev421064.service-now.com/api/now/table/cmdb_ci/app001",
+            "value": "app001",
+        },
+        "type": {
+            "link": "https://dev421064.service-now.com/api/now/table/cmdb_rel_type/somehash",
+            "value": "somehash",
+        },
+    }
+    edge = mapper.map_relationship(rec)
+    assert edge is not None
+    assert edge.source_id == "servicenow:tp001"
+    assert edge.target_id == "servicenow:app001"
+    assert edge.attributes["cmdb_rel_type_sys_id"] == "somehash"
+
+
+def test_map_relationship_returns_none_when_reference_value_empty():
+    mapper = ServiceNowMapper(TENANT)
+    rec = {
+        "sys_id": "rel004",
+        "parent": {"link": "https://dev421064.service-now.com/...", "value": ""},
+        "child": {"link": "https://dev421064.service-now.com/...", "value": "app001"},
+    }
+    assert mapper.map_relationship(rec) is None
+
+
 def test_mapper_third_party_vendor():
     mapper = ServiceNowMapper(TENANT)
     rec = {
