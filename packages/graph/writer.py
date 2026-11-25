@@ -73,6 +73,7 @@ ON CREATE SET
   n += $native_attrs
 ON MATCH SET
   n.id                = $id,
+  n.node_type         = $node_type,
   n.name              = $name,
   n.confidence_score  = $confidence_score,
   n.freshness_score   = $freshness_score,
@@ -84,6 +85,12 @@ ON MATCH SET
   n += $native_attrs
 RETURN n.id as node_id
 """
+# BUG CORRIGÉ (DEC-012) : n.node_type était posé dans ON CREATE SET mais absent de
+# ON MATCH SET -- une fois un nœud créé avec un node_type donné, aucune ré-ingestion
+# ultérieure ne pouvait jamais le corriger (ex : un cmdb_ci_service ServiceNow
+# requalifié en BUSINESS_FUNCTION après correction du mapper restait bloqué en
+# APPLICATION tant que le nœud existait déjà). Découvert en vérifiant le scénario
+# DORA-CONCENTRATION-001 sur le PDI réel de Lara (dev421064).
 
 # NOUVEAU (V3) : upsert d'une arête. MATCH par tenant_id + id interne
 # (les CuzEdge portent déjà des CuzNode.id générés par les mappers en
