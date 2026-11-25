@@ -204,6 +204,31 @@ def test_mapper_missing_business_criticality_stays_application():
     assert node.attributes["criticality_raw"] is None
 
 
+def test_mapper_busines_criticality_typo_field_name_also_works():
+    """Confirmé par dump brut des champs sur le PDI réel de Lara (dev421064) : le champ
+    s'appelle `busines_criticality` (une seule "s") sur cette instance, pas
+    `business_criticality` -- coquille réelle de la donnée de démo ServiceNow, pas de
+    notre côté. On doit la reconnaître sans que ce soit documenté ailleurs que par ce
+    test et le commentaire du code."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "svc006", "name": "SAP Payroll", "busines_criticality": "1"}
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.BUSINESS_FUNCTION
+    assert node.attributes["criticality_raw"] == "critical"
+
+
+def test_mapper_criticality_as_full_label_not_raw_code():
+    """Toujours confirmé sur le PDI réel : avec sysparm_display_value=false (déjà le
+    réglage de connector.py), ce champ ne renvoie pas le code brut "1" mais le libellé
+    entier "1 - most critical" -- value et display_value identiques dans le dump. Seul
+    le premier caractère est significatif, pas le texte complet du libellé."""
+    mapper = ServiceNowMapper(TENANT)
+    rec = {"sys_id": "svc007", "name": "SAP Payroll", "busines_criticality": "1 - most critical"}
+    node = mapper.map_ci("cmdb_ci_service", rec)
+    assert node.node_type == NodeType.BUSINESS_FUNCTION
+    assert node.attributes["criticality_raw"] == "critical"
+
+
 def test_mapper_third_party_vendor_ignores_business_criticality():
     """Un prestataire tiers (u_vendor_type=third_party) reste THIRD_PARTY même si
     business_criticality est renseigné -- c'est un prestataire, pas la fonction métier

@@ -16,20 +16,40 @@ TABLE_TO_NODE_TYPE = {
     "cmdb_rel_ci": None,  # arête — traité séparément
 }
 
-# Trouvé par Lara sur son PDI réel (dev421064) : connector.py interroge avec
-# sysparm_display_value=false, donc business_criticality (champ OOB choice list de
-# cmdb_ci_service, CSDM "Business Service") arrive en valeur brute ("1".."4"), jamais en
-# libellé affiché. Mapping vers le même vocabulaire que business_process_loader.py
-# (criticality_raw: "critical"/"high"/...), seul vocabulaire que DORA-CONCENTRATION-001
-# sait filtrer (cf. packages/detection/rules/dora.py). Valeurs non reconnues ou absentes
-# (None, "", valeur hors 1-4) : aucune promotion en BUSINESS_FUNCTION, le CI reste
-# APPLICATION/THIRD_PARTY comme avant -- jamais de criticité devinée.
+# Vérifié par Lara sur son PDI réel (dev421064), dump complet des champs d'un
+# cmdb_ci_service (sysparm_display_value=all) -- deux surprises par rapport à ce qui était
+# supposé au premier jet :
+#
+# 1. Le champ s'appelle `busines_criticality` (une seule "s") sur cette instance, pas
+#    `business_criticality` -- une coquille réelle dans la donnée de démo OOB ServiceNow
+#    elle-même (confirmée par dump brut des champs, pas une supposition). On garde quand
+#    même `business_criticality` en premier essai : c'est le nom standard documenté par
+#    ServiceNow pour ce champ CSDM, qui peut être le bon sur une autre instance/version.
+# 2. Avec sysparm_display_value=false (déjà le réglage de connector.py), ce champ ne
+#    renvoie pas un code brut ("1".."4") comme pour un choice list classique, mais
+#    directement le libellé entier ("1 - most critical") -- `value` et `display_value`
+#    sont identiques dans le dump. _parse_criticality() ne retient que le premier
+#    caractère, ce qui couvre les deux formats (code brut ou libellé complet) sans
+#    deviner de sémantique au-delà de ce chiffre 1-4 déjà documenté par ServiceNow.
+#
+# Mapping vers le même vocabulaire que business_process_loader.py (criticality_raw:
+# "critical"/"high"/...), seul vocabulaire que DORA-CONCENTRATION-001 sait filtrer (cf.
+# packages/detection/rules/dora.py). Valeur non reconnue ou absente : aucune promotion en
+# BUSINESS_FUNCTION, le CI reste APPLICATION/THIRD_PARTY comme avant -- jamais de
+# criticité devinée.
 SERVICENOW_BUSINESS_CRITICALITY_MAP = {
     "1": "critical",  # "1 - most critical"
     "2": "high",  # "2 - somewhat critical"
     "3": "medium",  # "3 - less critical"
     "4": "low",  # "4 - not critical"
 }
+
+
+def _parse_criticality(rec: dict[str, Any]) -> str | None:
+    raw = rec.get("business_criticality") or rec.get("busines_criticality")
+    if not raw:
+        return None
+    return SERVICENOW_BUSINESS_CRITICALITY_MAP.get(str(raw).strip()[:1])
 
 
 class ServiceNowMapper:
@@ -55,9 +75,7 @@ class ServiceNowMapper:
         # de business_process_loader.py (P1.16).
         criticality_raw = None
         if table == "cmdb_ci_service" and node_type == NodeType.APPLICATION:
-            criticality_raw = SERVICENOW_BUSINESS_CRITICALITY_MAP.get(
-                str(rec.get("business_criticality") or "")
-            )
+            criticality_raw = _parse_criticality(rec)
             if criticality_raw in ("critical", "high"):
                 node_type = NodeType.BUSINESS_FUNCTION
 
